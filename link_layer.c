@@ -1,25 +1,32 @@
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <termios.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <termios.h>
 #include <unistd.h>
 
 #define BAUDRATE B38400
-#define SET_MSG_LEN 5
+#define FRAME_SU_LEN 5
 #define TTYS0 "/dev/ttyS0"
 #define TTYS1 "/dev/ttyS1"
 #define TTYS2 "/dev/ttyS2"
+
+#define TIMEOUT 3
+#define MAX_RETRIES 3
 
 #define OK 0
 #define BAD_ARGS 1
 #define OPEN_PORT_FAIL 2
 #define SET_ATTR_FAIL 3
 #define CLOSE_PORT_FAIL 4
+#define EXIT_TIMEOUT 5
 
 #define FALSE 0
 #define TRUE 1
+
+typedef __uint8_t uint_8;
 
 typedef struct termios TERMIOS;
 
@@ -29,7 +36,7 @@ typedef enum com_mode
 	RECEIVER
 } COM_MODE;
 
-typedef enum trama_codes
+typedef enum frame_codes
 {
 	FLAG = 0x7E,
 	A_SENDER = 0x03,
@@ -41,7 +48,26 @@ typedef enum trama_codes
 	C_REJ_0 = 0x01,
 	C_RR_1 = C_RR_0 | 0x80,
 	C_REJ_1 = C_REJ_0 | 0x80
-} TRAMA;
+} FRAME;
+
+const char *bit_rep[16] = {
+    [ 0] = "0000", [ 1] = "0001", [ 2] = "0010", [ 3] = "0011",
+    [ 4] = "0100", [ 5] = "0101", [ 6] = "0110", [ 7] = "0111",
+    [ 8] = "1000", [ 9] = "1001", [10] = "1010", [11] = "1011",
+    [12] = "1100", [13] = "1101", [14] = "1110", [15] = "1111",
+};
+
+void print_byte(int d, uint_8 byte)
+{
+    printf("%d: %s%s\n", d, bit_rep[byte >> 4], bit_rep[byte & 0x0F]);
+}
+
+unsigned retriesCount = 0;
+unsigned timeout_exit = 0;
+int port_fd;
+int bytesWritten;
+int bytesRead;
+TERMIOS oldtio,newtio;
 
 
 int open_port(int port, int* fd)
@@ -71,7 +97,7 @@ int open_port(int port, int* fd)
 
 	//Opening as R/W and not as controlling tty to not get killed if linenoise sends CTRL-C.
 
-	*fd = open(portName, O_RDWR | O_NOCTTY);
+	*fd = open(portName, O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (*fd <0)
 	{
 		perror("open");
@@ -148,57 +174,76 @@ int close_port(int fd)
 	return OK;
 }
 
-int write_msg(int fd, __uint8_t msg[], int len, int* bw)
+int write_msg(int fd, uint_8 msg[], unsigned len, int* bw)
 {
+    printf("Sending %u bytes:\n", len);
+	for (unsigned i = 0; i < len; i++)
+	    printf(" %u: %x\n", i, msg[i]);
+	
 	*bw = write(fd, msg, len); //TODO: Erro handling
+
     printf("%d bytes written\n", *bw);
 
 	return OK;
 }
 
-const char *bit_rep[16] = {
-    [ 0] = "0000", [ 1] = "0001", [ 2] = "0010", [ 3] = "0011",
-    [ 4] = "0100", [ 5] = "0101", [ 6] = "0110", [ 7] = "0111",
-    [ 8] = "1000", [ 9] = "1001", [10] = "1010", [11] = "1011",
-    [12] = "1100", [13] = "1101", [14] = "1110", [15] = "1111",
-};
-
-void print_byte(int d, __uint8_t byte)
+void exitOnTimeout()
 {
-    printf("%d: %s%s\n", d, bit_rep[byte >> 4], bit_rep[byte & 0x0F]);
+	if(timeout_exit)
+	{
+		restore_port_attr(port_fd, &oldtio);
+		close_port(port_fd);
+		exit(-1);
+	}
 }
 
-int read_msg(int fd, __uint8_t* msg, int* br)
+int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, void (*func)(void))
 {
-	int STOP = 0;
-
 	*br = 0;
 
 	int res;
-	__uint8_t buf[1];
+	uint_8 buf[1];
 
 
+	int STOP = 0;
 	while (STOP == FALSE)
 	{
+		if(func) func();
+
 		res = read(fd,buf,1);
+
+		if(res == -1)
+			continue;
+
 
 		msg[*br] = buf[0];
 
-		if(*br > 1 && msg[*br - 1] != FLAG && msg[*br] == FLAG)
+		if( (*br > 1 && msg[*br - 1] != FLAG && msg[*br] == FLAG) || *br == maxLength )
 		{
 			STOP = TRUE;
 		}
 		
 		*br += res;
     }
-	printf("Got %d bytes: %s\n", *br, msg);
-	print_byte(0, msg[0]);
-	print_byte(1, msg[1]);
-	print_byte(2, msg[2]);
-	print_byte(3, msg[3]);
-	print_byte(4, msg[4]);
 
 	return OK;
+}
+
+void timeoutHandler()
+{
+	if(retriesCount >= MAX_RETRIES)
+	{
+		timeout_exit = 1;
+		return;
+	}
+
+	printf("Retrying...\n");
+
+	uint_8 set_msg[FRAME_SU_LEN] = { FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG };
+	write_msg(port_fd, set_msg, FRAME_SU_LEN, &bytesWritten);
+
+	alarm(TIMEOUT);
+	retriesCount++;
 }
 
 int llopen(int port, COM_MODE mode, int* port_fd)
@@ -207,36 +252,62 @@ int llopen(int port, COM_MODE mode, int* port_fd)
 	if(err != 0)
 		return err;
 
-    TERMIOS oldtio,newtio;
 	err = set_port_attr(*port_fd, &oldtio, &newtio);
 	if(err != 0)
 		return err;
 
+	// int bytesWritten;
+	// int bytesRead;
+	uint_8 bcc;
+
 	if(mode == TRANSMITTER)
 	{
-		__uint8_t set_msg[SET_MSG_LEN] = { FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG };
-		printf("%s\n", set_msg);
-
 		// SEND SET
-		int bytesWritten;
-		write_msg(*port_fd, set_msg, SET_MSG_LEN, &bytesWritten);
+		uint_8 set_msg[FRAME_SU_LEN] = { FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG };
+		write_msg(*port_fd, set_msg, FRAME_SU_LEN, &bytesWritten);
+
+
+		// ENABLE TIMEOUT MECHANISM
+		(void) signal(SIGALRM, timeoutHandler);
+		alarm(TIMEOUT);
 
 		// WAIT FOR UA
+		uint_8 msg[255];
+		read_msg(*port_fd, msg, &bytesRead, 255, exitOnTimeout);
+
+		// DISABLE TIMEOUT MECHANISM
+		alarm(0);
+
+		printf("Got %d bytes:\n", bytesRead);
+		for (unsigned i = 0; i < bytesRead; i++)
+	    	printf(" %u: %x\n", i, msg[i]);
+
+		bcc = msg[1] ^ msg[2];
+		if(bcc != msg[3])
+			printf("Error found in msg!\n");
 	}
 	else if(mode == RECEIVER)
 	{
 		// WAIT FOR SET
-		int bytesRead;
-		__uint8_t msg[255];
-		read_msg(*port_fd, msg, &bytesRead);
+		uint_8 msg[255];
+		read_msg(*port_fd, msg, &bytesRead, 255, NULL);
+
+		printf("Got %d bytes:\n", bytesRead);
+		for (unsigned i = 0; i < bytesRead; i++)
+	    	printf(" %u: %x\n", i, msg[i]);
+
+		bcc = msg[1] ^ msg[2];
+		if(bcc != msg[3])
+			printf("Error found in msg!\n");
 
 		// SEND UA
+		uint_8 ua_msg[FRAME_SU_LEN] = { FLAG, A_RECEIVER, C_UA, A_RECEIVER ^ C_UA, FLAG };
+		write_msg(*port_fd, ua_msg, FRAME_SU_LEN, &bytesWritten);
 	}
 	else
 	{
 		//TODO: error handling
 	}
-	
 
 
 	return OK;
@@ -251,7 +322,6 @@ int main(int argc, char const *argv[])
       return BAD_ARGS;
     }
 
-	int port_fd;
 	int portNumber = strtol(argv[1],  NULL, 10);
 
 	COM_MODE mode;
