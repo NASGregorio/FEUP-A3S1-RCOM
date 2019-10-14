@@ -1,7 +1,7 @@
 src = $(wildcard *.c)
 obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
-prog = link_layer
+prog = rcom
 
 CFLAGS = -Wall -Werror
 
