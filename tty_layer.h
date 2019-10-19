@@ -13,6 +13,6 @@ int set_port_attr(int fd, TERMIOS* oldtio, TERMIOS* newtio);
 int restore_port_attr(int fd, TERMIOS* oldtio);
 
 int write_msg(int fd, uint_8 msg[], unsigned len, int* bw);
-int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, void (*func)(void));
+int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, int (*func)(void));
 
 #endif /*__TTY_LAYER_H__*/

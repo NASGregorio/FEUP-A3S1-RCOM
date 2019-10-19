@@ -5,37 +5,44 @@
 
 #include "defs.h"
 #include "link_layer.h"
-#include "tty_layer.h"
-
-///////////////////////////////////////////////////////////////////
-const char *bit_rep[16] = {
-    [ 0] = "0000", [ 1] = "0001", [ 2] = "0010", [ 3] = "0011",
-    [ 4] = "0100", [ 5] = "0101", [ 6] = "0110", [ 7] = "0111",
-    [ 8] = "1000", [ 9] = "1001", [10] = "1010", [11] = "1011",
-    [12] = "1100", [13] = "1101", [14] = "1110", [15] = "1111",
-};
-
-void print_byte(int d, uint_8 byte)
-{
-    printf("%d: %s%s\n", d, bit_rep[byte >> 4], bit_rep[byte & 0x0F]);
-}
-///////////////////////////////////////////////////////////////////
 
 unsigned retriesCount = 0;
 unsigned timeout_exit = 0;
 int* port_fd;
 int bytesWritten;
 int bytesRead;
-TERMIOS oldtio,newtio;
+TERMIOS newtio;
+int conn_good = 0;
 
-void exitOnTimeout()
+int returnOnTimeout()
 {
 	if(timeout_exit)
 	{
-		restore_port_attr(*port_fd, &oldtio);
-		close_port(*port_fd);
-		exit(-1);
+		printf("Connection timeout\n");
+		return EXIT_TIMEOUT;
 	}
+	return OK;
+}
+
+int send_set_msg()
+{
+	uint_8 set_msg[FRAME_SU_LEN] = { FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG };
+	return write_msg(*port_fd, set_msg, FRAME_SU_LEN, &bytesWritten);
+}
+
+int send_ua_msg()
+{
+	uint_8 ua_msg[FRAME_SU_LEN] = { FLAG, A_RECEIVER, C_UA, A_RECEIVER ^ C_UA, FLAG };
+	return write_msg(*port_fd, ua_msg, FRAME_SU_LEN, &bytesWritten);
+}
+
+/**
+ * @brief return true if no errors
+ */
+int check_bcc_errors(uint_8 a, uint_8 c, uint_8 bcc)
+{
+	uint_8 calc = a ^ c;
+	return bcc == calc;
 }
 
 void timeoutHandler()
@@ -47,79 +54,75 @@ void timeoutHandler()
 		return;
 	}
 
-
-	uint_8 set_msg[FRAME_SU_LEN] = { FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG };
-	write_msg(*port_fd, set_msg, FRAME_SU_LEN, &bytesWritten);
-
-	retriesCount++;
+	printf("Retrying... (%d)\n",retriesCount++);
+	send_set_msg();
 	alarm(TIMEOUT);
-	printf("Retrying... (%d)\n",retriesCount);
 }
 
-int llopen(int port, COM_MODE mode, int* fd)
+int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio)
 {
 	port_fd = fd;
 
 	int err = open_port(port, port_fd);
-	if(err != 0)
+	if(err != OK)
 		return err;
 
-
-	printf("B\n");
-
-	err = set_port_attr(*port_fd, &oldtio, &newtio);
-	if(err != 0)
+	err = set_port_attr(*port_fd, oldtio, &newtio);
+	if(err != OK)
 		return err;
-
-	uint_8 bcc;
 
 	if(mode == TRANSMITTER)
 	{
-		// SEND SET
-		uint_8 set_msg[FRAME_SU_LEN] = { FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG };
-		write_msg(*port_fd, set_msg, FRAME_SU_LEN, &bytesWritten);
+		send_set_msg();
 
-
-		// ENABLE TIMEOUT MECHANISM
+		// Disable timeout mechanism
 		(void) signal(SIGALRM, timeoutHandler);
 		alarm(TIMEOUT);
 
-		// WAIT FOR UA
+		// Wait for UA
 		uint_8 msg[255];
-		read_msg(*port_fd, msg, &bytesRead, 255, exitOnTimeout);
+		err = read_msg(*port_fd, msg, &bytesRead, 255, returnOnTimeout);
 
-		// DISABLE TIMEOUT MECHANISM
+		// Exceeded timeout time, exit.
+		if(err != OK)
+			return err;
+
+		// Disable timeout mechanism
 		alarm(0);
 
-		printf("Got %d bytes:\n", bytesRead);
-		for (unsigned i = 0; i < bytesRead; i++)
-	    	printf(" %u: %x\n", i, msg[i]);
-
-		bcc = msg[1] ^ msg[2];
-		if(bcc != msg[3])
-			printf("Error found in msg!\n");
+		// Check UA for errors
+		if(bytesRead != FRAME_SU_LEN || !check_bcc_errors(msg[1], msg[2], msg[3]))
+		{
+			#ifdef DEBUG_TTY_CALLS
+			printf("Error in SET\n");
+			#endif
+			timeoutHandler();
+		}
 	}
 	else if(mode == RECEIVER)
 	{
-		// WAIT FOR SET
-		uint_8 msg[255];
-		read_msg(*port_fd, msg, &bytesRead, 255, NULL);
+		while(!conn_good)
+		{
+			// Wait for SET
+			uint_8 msg[255];
+			read_msg(*port_fd, msg, &bytesRead, 255, NULL);
 
-		printf("Got %d bytes:\n", bytesRead);
-		for (unsigned i = 0; i < bytesRead; i++)
-	    	printf(" %u: %x\n", i, msg[i]);
+			// Check SET for errors
+			if(bytesRead != FRAME_SU_LEN || !check_bcc_errors(msg[1], msg[2], msg[3]))
+			{
+				#ifdef DEBUG_TTY_CALLS
+				printf("Error in SET\n");
+				#endif
+				continue;
+			}
 
-		bcc = msg[1] ^ msg[2];
-		if(bcc != msg[3])
-			printf("Error found in msg!\n");
-
-		// SEND UA
-		uint_8 ua_msg[FRAME_SU_LEN] = { FLAG, A_RECEIVER, C_UA, A_RECEIVER ^ C_UA, FLAG };
-		write_msg(*port_fd, ua_msg, FRAME_SU_LEN, &bytesWritten);
+			send_ua_msg();
+			conn_good = 1;
+		}
 	}
 	else
 	{
-		//TODO: error handling
+		return BAD_ARGS;
 	}
 
 

@@ -32,15 +32,12 @@ int open_port(int port, int* fd)
 	}
 
 	//Opening as R/W and not as controlling tty to not get killed if linenoise sends CTRL-C.
-
 	*fd = open(portName, O_RDWR | O_NOCTTY);
     if (*fd <0)
 	{
 		perror("open");
 		return OPEN_PORT_FAIL;
 	}
-
-	//fdopen com r+
 
 	return OK;
 }
@@ -112,18 +109,23 @@ int close_port(int fd)
 
 int write_msg(int fd, uint_8 msg[], unsigned len, int* bw)
 {
-    printf("Sending %u bytes:\n", len);
-	for (unsigned i = 0; i < len; i++)
-	    printf(" %u: %x\n", i, msg[i]);
+	if ( (*bw = write(fd, msg, len)) < 0)  //TODO: Erro handling
+	{
+		perror("write: ");
+		return WRITE_FAIL;
+	}
 
-	*bw = write(fd, msg, len); //TODO: Erro handling
-
-    printf("%d bytes written\n", *bw);
+	#ifdef DEBUG_TTY_CALLS
+	printf("Send %uB: ", *bw);
+	for (unsigned i = 0; i < *bw; i++)
+	    printf("%x", msg[i]);
+	printf("\n");
+	#endif
 
 	return OK;
 }
 
-int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, void (*func)(void))
+int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, int (*func)(void))
 {
 	*br = 0;
 
@@ -134,11 +136,16 @@ int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, void (*func)(void
 	int STOP = 0;
 	while (STOP == FALSE)
 	{
-		if(func) func();
+		if(func && (func() == EXIT_TIMEOUT))
+			return EXIT_TIMEOUT;
 
 		res = read(fd,buf,1);
-
-		if(res == -1)
+		if (res == -1)
+		{
+			perror("read: ");
+			return READ_FAIL;
+		}
+		if(res == 0)
 			continue;
 
 
@@ -151,6 +158,13 @@ int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, void (*func)(void
 
 		*br += res;
     }
+
+	#ifdef DEBUG_TTY_CALLS
+	printf("Read %uB: ", *br);
+	for (unsigned i = 0; i < *br; i++)
+		printf("%x", msg[i]);
+	printf("\n");
+	#endif
 
 	return OK;
 }

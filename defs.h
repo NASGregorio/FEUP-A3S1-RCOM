@@ -8,6 +8,8 @@
 #define TTYS1 "/dev/ttyS1"
 #define TTYS2 "/dev/ttyS2"
 
+#define DEBUG_TTY_CALLS
+
 #define TIMEOUT 3
 #define MAX_RETRIES 3
 
@@ -17,6 +19,9 @@
 #define SET_ATTR_FAIL 3
 #define CLOSE_PORT_FAIL 4
 #define EXIT_TIMEOUT 5
+#define INVALID_FD 6
+#define WRITE_FAIL 7
+#define READ_FAIL 8
 
 #define FLAG 0x7E
 #define A_SENDER 0x03
@@ -33,3 +38,21 @@
 #define TRUE 1
 
 #endif /*__DEFS_H__*/
+
+
+
+/*
+///////////////////////////////////////////////////////////////////
+const char *bit_rep[16] = {
+    [ 0] = "0000", [ 1] = "0001", [ 2] = "0010", [ 3] = "0011",
+    [ 4] = "0100", [ 5] = "0101", [ 6] = "0110", [ 7] = "0111",
+    [ 8] = "1000", [ 9] = "1001", [10] = "1010", [11] = "1011",
+    [12] = "1100", [13] = "1101", [14] = "1110", [15] = "1111",
+};
+
+void print_byte(int d, uint_8 byte)
+{
+    printf("%d: %s%s\n", d, bit_rep[byte >> 4], bit_rep[byte & 0x0F]);
+}
+///////////////////////////////////////////////////////////////////
+*/

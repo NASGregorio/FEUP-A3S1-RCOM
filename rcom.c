@@ -1,12 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-// #include <unistd.h>
 
-// #include "defs.h"
 #include "link_layer.h"
 #include "defs.h"
-// #include "tty_layer.h"
 
 int main(int argc, char const *argv[])
 {
@@ -17,6 +14,7 @@ int main(int argc, char const *argv[])
     }
 
     int port_fd;
+	TERMIOS oldtio;
 
 	int portNumber = strtol(argv[1],  NULL, 10);
 
@@ -28,14 +26,16 @@ int main(int argc, char const *argv[])
 	else
 		return BAD_ARGS;
 
-    printf("A\n");
+	printf("Establishing connection...\n");
+	int err = llopen(portNumber, mode, &port_fd, &oldtio);
+	if(err != OK)
+		printf("Failed to establish connection\n");
 
+	printf("Done!\n");
 
-	int err = llopen(portNumber, mode, &port_fd);
+	err = llclose(port_fd, &oldtio);
 	if(err != OK)
 		return err;
-        
-    printf("Z\n");
 
     return OK;
 }
