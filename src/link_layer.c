@@ -78,13 +78,13 @@ void frame_set_reply()
 {
 	if(check_frame_errors(frame, FRAME_SU_LEN, A_SENDER, C_SET, 0, 0))
 	{
-		DEBUG_PRINT("Error in SET frame\n");
+		DEBUG_PRINT(("Error in SET frame\n"));
 		return;
 	}
 
-	DEBUG_PRINT("Got SET\n");
+	DEBUG_PRINT(("Got SET\n"));
 	write_msg(*llfd, frame_UA, sizeof(frame_UA), &bytes_written);
-	DEBUG_PRINT("Sent UA\n");
+	DEBUG_PRINT(("Sent UA\n"));
 
 	printf("Incoming data...\n");
 }
@@ -95,15 +95,19 @@ void frame_i_reply(int len)
 
 	if(check_frame_errors(frame, len, A_SENDER, (sequenceNumber ? C_I_0 : C_I_1), 0, 1))
 	{
-		DEBUG_PRINT("Error in I frame\n");
+		DEBUG_PRINT(("Error in I frame\n"));
 
         // Set frame number
         frame_RR_REJ[2] = (sequenceNumber ? C_REJ_1 : C_REJ_0);
-        frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 	}
 
-	DEBUG_PRINT("Got I\n");
+	DEBUG_PRINT(("Got I\n"));
+	DEBUG_PRINT(("PRE REPLY sequenceNumber: %d\n", sequenceNumber));
 
+    frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
+    frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+
+	sequenceNumber = !sequenceNumber;
 
     // Extract data
     // char str[sizeof(buf)-7];
@@ -115,17 +119,16 @@ void frame_i_reply(int len)
     // printf("%s\n",p);
 
     // Set frame number
-    frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
-    frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
 	write_msg(*llfd, frame_RR_REJ, sizeof(frame_RR_REJ), &bytes_written);
-	DEBUG_PRINT("Sent RR\n");
+	DEBUG_PRINT(("Sent RR\n"));
+	DEBUG_PRINT(("POS REPLY sequenceNumber: %d\n", sequenceNumber));
 
 }
 
 int transmitter_set()
 {
-	DEBUG_PRINT("--------------------\n");
+	DEBUG_PRINT(("--------------------\n"));
 
 	frame[0] = FLAG;
 	frame[1] = A_SENDER;
@@ -135,9 +138,9 @@ int transmitter_set()
 	frame_len = FRAME_SU_LEN;
 
 	write_msg(*llfd, frame, frame_len, &bytes_written);
-	DEBUG_PRINT("Sent SET\n");
+	DEBUG_PRINT(("Sent SET\n"));
 
-	// Disable timeout mechanism
+	// Enable timeout mechanism
 	(void) signal(SIGALRM, timeout_handler);
 	alarm(TIMEOUT);
 
@@ -146,7 +149,7 @@ int transmitter_set()
 	int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
 
 	// Exceeded timeout time, exit.
-	if(err != OK)
+	if(err == EXIT_TIMEOUT)
 		return err;
 
 	// Disable timeout mechanism
@@ -155,16 +158,11 @@ int transmitter_set()
 	// Check UA for errors
 	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, C_UA, 1, 0))
 	{
-		DEBUG_PRINT("Error in SET\n");
+		DEBUG_PRINT(("Error in SET\n"));
 		timeout_handler();
 	}
 
-	// if(!BCC_CHECK(msg[1], msg[2], msg[3]))
-	// {
-	// }
-	DEBUG_PRINT("Got UA\n");
-
-
+	DEBUG_PRINT(("Got UA\n"));
 	printf("Starting transfer...\n");
 
 	return OK;
@@ -190,15 +188,15 @@ int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio)
 		printf("Connection open\n");
 	}
 
+	// 0 for TRANSMITTER | 1 for RECEIVER
+	sequenceNumber = (mode == RECEIVER);
 
 	if(mode == TRANSMITTER)
-		transmitter_set();
+		return transmitter_set();
 	else if(mode != RECEIVER)
 		return BAD_ARGS;
 
 
-	// 0 for TRANSMITTER | 1 for RECEIVER
-	sequenceNumber = (mode == RECEIVER);
 
 	return OK;
 }
@@ -215,7 +213,7 @@ int llclose(TERMIOS* oldtio)
 
 int llwrite(uint8_t* buf, int len)
 {
-	DEBUG_PRINT("--------------------\n");
+	DEBUG_PRINT(("--------------------\n"));
 
 	frame[0] = FLAG;
 	frame[1] = A_SENDER;
@@ -229,10 +227,13 @@ int llwrite(uint8_t* buf, int len)
 	frame[len+5] = FLAG;
 	frame_len = FRAME_SU_LEN + 1 + len;
 
-	write_msg(*llfd, frame, frame_len, &bytes_written);
-	DEBUG_PRINT("Sent I\n");
+	DEBUG_PRINT(("PRE SEND sequenceNumber: %d\n", sequenceNumber));
 
-	// Disable timeout mechanism
+
+	write_msg(*llfd, frame, frame_len, &bytes_written);
+	DEBUG_PRINT(("Sent I\n"));
+
+	// Enable timeout mechanism
 	(void) signal(SIGALRM, timeout_handler);
 	alarm(TIMEOUT);
 
@@ -251,7 +252,7 @@ int llwrite(uint8_t* buf, int len)
 
 	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, (sequenceNumber ? C_RR_0 : C_RR_1), 1, 0))
 	{
-		DEBUG_PRINT("Error in RR\n");
+		DEBUG_PRINT(("Error in RR\n"));
 		timeout_handler();
 	}
 
@@ -260,20 +261,23 @@ int llwrite(uint8_t* buf, int len)
 	// {
 	// }
 
-	DEBUG_PRINT("Got RR\n");
+	DEBUG_PRINT(("Got RR\n"));
+
+	// Update sequence number
+	sequenceNumber = !sequenceNumber;
+
+	DEBUG_PRINT(("POS RR sequenceNumber: %d\n", sequenceNumber));
 
 	// for (unsigned i = 0; i < bytes_read; i++)
 	//     printf("%x", msg[i]);
 	// printf("\n");
-
-	sequenceNumber = !sequenceNumber;
 
 	return OK;
 }
 
 int llread()
 {
-	DEBUG_PRINT("--------------------\n");
+	DEBUG_PRINT(("--------------------\n"));
 
     // Wait for frame
 	if(read_msg(*llfd, frame, &bytes_read, 255, NULL) != OK)
@@ -290,6 +294,7 @@ int llread()
         frame_set_reply();
         break;
     case C_I_0:
+    case C_I_1:
         frame_i_reply(bytes_read);
         break;
     case C_DISC:

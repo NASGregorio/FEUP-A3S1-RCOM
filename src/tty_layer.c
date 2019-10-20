@@ -130,6 +130,7 @@ int write_msg(int fd, uint8_t msg[], unsigned len, int* bw)
 	if(check_fd(fd) != OK)
 		return INVALID_FD;
 
+
 	if ( (*bw = write(fd, msg, len)) < 0)
 	{
 		perror("write: ");
