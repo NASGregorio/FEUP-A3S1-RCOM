@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -42,8 +43,22 @@ int open_port(int port, int* fd)
 	return OK;
 }
 
+int check_fd(int fd)
+{
+	// Check if fd is valid
+    if( fcntl(fd, F_GETFD) == -1 && errno == EBADF )
+    {
+        perror("fcntl");
+        return INVALID_FD;
+    }
+	return OK;
+}
+
 int set_port_attr(int fd, TERMIOS* oldtio, TERMIOS* newtio)
 {
+	if(check_fd(fd) != OK)
+		return INVALID_FD;
+
 	// save current port settings
 	if ( tcgetattr(fd,oldtio) == -1)
 	{
@@ -87,6 +102,9 @@ int set_port_attr(int fd, TERMIOS* oldtio, TERMIOS* newtio)
 
 int restore_port_attr(int fd, TERMIOS* oldtio)
 {
+	if(check_fd(fd) != OK)
+		return INVALID_FD;
+
 	if (tcsetattr(fd,TCSANOW,oldtio) == -1)
 	{
 		perror("tcsetattr");
@@ -107,9 +125,12 @@ int close_port(int fd)
 	return OK;
 }
 
-int write_msg(int fd, uint_8 msg[], unsigned len, int* bw)
+int write_msg(int fd, uint8_t msg[], unsigned len, int* bw)
 {
-	if ( (*bw = write(fd, msg, len)) < 0)  //TODO: Erro handling
+	if(check_fd(fd) != OK)
+		return INVALID_FD;
+
+	if ( (*bw = write(fd, msg, len)) < 0)
 	{
 		perror("write: ");
 		return WRITE_FAIL;
@@ -118,19 +139,22 @@ int write_msg(int fd, uint_8 msg[], unsigned len, int* bw)
 	#ifdef DEBUG_TTY_CALLS
 	printf("Send %uB: ", *bw);
 	for (unsigned i = 0; i < *bw; i++)
-	    printf("%x", msg[i]);
+	    printf("%02x", msg[i]);
 	printf("\n");
 	#endif
 
 	return OK;
 }
 
-int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, int (*func)(void))
+int read_msg(int fd, uint8_t* msg, int* br, unsigned maxLength, int (*func)(void))
 {
+	if(check_fd(fd) != OK)
+		return INVALID_FD;
+
 	*br = 0;
 
 	int res;
-	uint_8 buf[1];
+	uint8_t buf[1];
 
 
 	int STOP = 0;
@@ -145,9 +169,12 @@ int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, int (*func)(void)
 			perror("read: ");
 			return READ_FAIL;
 		}
+
 		if(res == 0)
 			continue;
 
+		if(*br == 0 && buf[0] != FLAG)
+			continue;
 
 		msg[*br] = buf[0];
 
@@ -162,7 +189,7 @@ int read_msg(int fd, uint_8* msg, int* br, unsigned maxLength, int (*func)(void)
 	#ifdef DEBUG_TTY_CALLS
 	printf("Read %uB: ", *br);
 	for (unsigned i = 0; i < *br; i++)
-		printf("%x", msg[i]);
+		printf("%02x", msg[i]);
 	printf("\n");
 	#endif
 

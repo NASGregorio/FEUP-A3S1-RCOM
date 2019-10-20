@@ -1,0 +1,302 @@
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "defs.h"
+#include "link_layer.h"
+
+int* llfd;
+unsigned retries_count = 0;
+unsigned timeout_exit = 0;
+unsigned sequenceNumber = 0;
+
+int bytes_written;
+int bytes_read;
+
+uint8_t frame[255];
+size_t frame_len = 255;
+
+uint8_t frame_UA[FRAME_SU_LEN] = { FLAG, A_RECEIVER, C_UA, A_RECEIVER ^ C_UA, FLAG };
+uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, A_RECEIVER, -1, -1, FLAG };
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+uint8_t BCC2_generator(uint8_t* msg, size_t len)
+{
+	uint8_t BCC2 = msg[0];
+	for (size_t i = 1; i < len; i++)
+	{
+		BCC2 ^= msg[i];
+	}
+	return BCC2;
+}
+
+int check_frame_errors(uint8_t* msg, size_t len, uint8_t expected_addr, uint8_t expected_ctrl, int check_bcc, int check_bcc2)
+{
+	return
+		(	msg[1] != expected_addr ||	// Wrong address field
+			msg[2] != expected_ctrl ||  // Wrong control field
+			(check_bcc && msg[3] != (msg[1] ^ msg[2])) ||
+			(check_bcc2 && msg[len - 2] != BCC2_generator(&frame[4], len - FRAME_SU_LEN - 1))
+		);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+void timeout_handler()
+{
+	if(retries_count >= MAX_RETRIES)
+	{
+		timeout_exit = 1;
+		alarm(0);
+		return;
+	}
+
+	printf("Retrying... (%d)\n",++retries_count);
+	write_msg(*llfd, frame, frame_len, &bytes_written);
+	alarm(TIMEOUT);
+}
+
+int return_on_timeout()
+{
+	if(timeout_exit)
+	{
+		printf("Connection timeout\n");
+		return EXIT_TIMEOUT;
+	}
+	return OK;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void frame_set_reply()
+{
+	if(check_frame_errors(frame, FRAME_SU_LEN, A_SENDER, C_SET, 0, 0))
+	{
+		DEBUG_PRINT("Error in SET frame\n");
+		return;
+	}
+
+	DEBUG_PRINT("Got SET\n");
+	write_msg(*llfd, frame_UA, sizeof(frame_UA), &bytes_written);
+	DEBUG_PRINT("Sent UA\n");
+
+	printf("Incoming data...\n");
+}
+
+void frame_i_reply(int len)
+{
+	// Check SET for errors
+
+	if(check_frame_errors(frame, len, A_SENDER, (sequenceNumber ? C_I_0 : C_I_1), 0, 1))
+	{
+		DEBUG_PRINT("Error in I frame\n");
+
+        // Set frame number
+        frame_RR_REJ[2] = (sequenceNumber ? C_REJ_1 : C_REJ_0);
+        frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+	}
+
+	DEBUG_PRINT("Got I\n");
+
+
+    // Extract data
+    // char str[sizeof(buf)-7];
+    // str[sizeof(buf)-6] = '\0';
+    // memcpy(str, buf, sizeof(buf)-6+1);
+
+    // char* p = strchr(str, FLAG);
+
+    // printf("%s\n",p);
+
+    // Set frame number
+    frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
+    frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+
+	write_msg(*llfd, frame_RR_REJ, sizeof(frame_RR_REJ), &bytes_written);
+	DEBUG_PRINT("Sent RR\n");
+
+}
+
+int transmitter_set()
+{
+	DEBUG_PRINT("--------------------\n");
+
+	frame[0] = FLAG;
+	frame[1] = A_SENDER;
+	frame[2] = C_SET;
+	frame[3] = (frame[1] ^ frame[2]);
+	frame[4] = FLAG;
+	frame_len = FRAME_SU_LEN;
+
+	write_msg(*llfd, frame, frame_len, &bytes_written);
+	DEBUG_PRINT("Sent SET\n");
+
+	// Disable timeout mechanism
+	(void) signal(SIGALRM, timeout_handler);
+	alarm(TIMEOUT);
+
+	// Wait for UA
+	uint8_t msg[255];
+	int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
+
+	// Exceeded timeout time, exit.
+	if(err != OK)
+		return err;
+
+	// Disable timeout mechanism
+	alarm(0);
+
+	// Check UA for errors
+	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, C_UA, 1, 0))
+	{
+		DEBUG_PRINT("Error in SET\n");
+		timeout_handler();
+	}
+
+	// if(!BCC_CHECK(msg[1], msg[2], msg[3]))
+	// {
+	// }
+	DEBUG_PRINT("Got UA\n");
+
+
+	printf("Starting transfer...\n");
+
+	return OK;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio)
+{
+	if( fcntl(*fd, F_GETFD) == -1 && errno == EBADF )
+	{
+		int err = open_port(port, fd);
+		if(err != OK)
+			return err;
+
+		TERMIOS newtio;
+		err = set_port_attr(*fd, oldtio, &newtio);
+		if(err != OK)
+			return err;
+
+		llfd = fd;
+		
+		printf("Connection open\n");
+	}
+
+
+	if(mode == TRANSMITTER)
+		transmitter_set();
+	else if(mode != RECEIVER)
+		return BAD_ARGS;
+
+
+	// 0 for TRANSMITTER | 1 for RECEIVER
+	sequenceNumber = (mode == RECEIVER);
+
+	return OK;
+}
+
+int llclose(TERMIOS* oldtio)
+{
+    restore_port_attr(*llfd, oldtio);
+	close_port(*llfd);
+
+    printf("Connection closed\n");
+
+    return OK;
+}
+
+int llwrite(uint8_t* buf, int len)
+{
+	DEBUG_PRINT("--------------------\n");
+
+	frame[0] = FLAG;
+	frame[1] = A_SENDER;
+	frame[2] = (sequenceNumber ? C_I_1 : C_I_0);
+	frame[3] = (frame[1] ^ frame[2]);
+
+	for (size_t i = 0; i < len; i++)
+		frame[i+4] = buf[i];
+
+	frame[len+4] = BCC2_generator(buf, len);
+	frame[len+5] = FLAG;
+	frame_len = FRAME_SU_LEN + 1 + len;
+
+	write_msg(*llfd, frame, frame_len, &bytes_written);
+	DEBUG_PRINT("Sent I\n");
+
+	// Disable timeout mechanism
+	(void) signal(SIGALRM, timeout_handler);
+	alarm(TIMEOUT);
+
+	// Wait for UA
+	uint8_t msg[255];
+	int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
+
+	// Exceeded timeout time, exit.
+	if(err != OK)
+		return err;
+
+	// Disable timeout mechanism
+	alarm(0);
+
+	// Check I for errors
+
+	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, (sequenceNumber ? C_RR_0 : C_RR_1), 1, 0))
+	{
+		DEBUG_PRINT("Error in RR\n");
+		timeout_handler();
+	}
+
+	// if(
+	// 	!BCC_CHECK(msg[1], msg[2], msg[3]))
+	// {
+	// }
+
+	DEBUG_PRINT("Got RR\n");
+
+	// for (unsigned i = 0; i < bytes_read; i++)
+	//     printf("%x", msg[i]);
+	// printf("\n");
+
+	sequenceNumber = !sequenceNumber;
+
+	return OK;
+}
+
+int llread()
+{
+	DEBUG_PRINT("--------------------\n");
+
+    // Wait for frame
+	if(read_msg(*llfd, frame, &bytes_read, 255, NULL) != OK)
+        return -1;
+
+    if(!BCC_CHECK(frame[1], frame[2], frame[3]))
+        return BCC_ERROR;
+
+    uint8_t ctrl_field = frame[2];
+
+    switch (ctrl_field)
+    {
+    case C_SET:
+        frame_set_reply();
+        break;
+    case C_I_0:
+        frame_i_reply(bytes_read);
+        break;
+    case C_DISC:
+        break;
+    default:
+        break;
+    }
+
+    return OK;
+}

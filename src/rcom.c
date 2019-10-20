@@ -26,14 +26,27 @@ int main(int argc, char const *argv[])
 	else
 		return BAD_ARGS;
 
-	printf("Establishing connection...\n");
 	int err = llopen(portNumber, mode, &port_fd, &oldtio);
 	if(err != OK)
 		printf("Failed to establish connection\n");
 
-	printf("Done!\n");
+	if(mode == RECEIVER)
+	{
+		while (TRUE)
+		{
+			llread(port_fd);
+		}
+	}
+	else if (mode == TRANSMITTER)
+	{
+		// write stuff
+		uint8_t buf[] = {1,1,0,6,1,9,9,1};
+		llwrite(buf, sizeof(buf));
 
-	err = llclose(port_fd, &oldtio);
+		// call llclose
+	}
+
+	err = llclose(&oldtio);
 	if(err != OK)
 		return err;
 

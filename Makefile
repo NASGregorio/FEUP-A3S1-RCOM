@@ -1,9 +1,10 @@
-src = $(wildcard *.c)
+src = $(wildcard src/*.c)
+inc := include
 obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
 prog = rcom
 
-CFLAGS = -Wall -Werror
+CFLAGS = -I$(inc) -Wall -Werror
 
 $(prog): $(obj)
 	$(CC) -o $@ $^ $(CFLAGS)
