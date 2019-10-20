@@ -101,28 +101,20 @@ void frame_i_reply(int len)
         frame_RR_REJ[2] = (sequenceNumber ? C_REJ_1 : C_REJ_0);
 	}
 
-	DEBUG_PRINT(("Got I\n"));
-	DEBUG_PRINT(("PRE REPLY sequenceNumber: %d\n", sequenceNumber));
+	DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
 
     frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
     frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
 	sequenceNumber = !sequenceNumber;
 
-    // Extract data
-    // char str[sizeof(buf)-7];
-    // str[sizeof(buf)-6] = '\0';
-    // memcpy(str, buf, sizeof(buf)-6+1);
-
-    // char* p = strchr(str, FLAG);
-
-    // printf("%s\n",p);
-
-    // Set frame number
+	// Print frame data
+	for (size_t i = 4; i < len-2; i++)
+		printf("%c",(char)(frame[i]));
+	printf("\n");
 
 	write_msg(*llfd, frame_RR_REJ, sizeof(frame_RR_REJ), &bytes_written);
-	DEBUG_PRINT(("Sent RR\n"));
-	DEBUG_PRINT(("POS REPLY sequenceNumber: %d\n", sequenceNumber));
+	DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
 
 }
 
@@ -227,11 +219,8 @@ int llwrite(uint8_t* buf, int len)
 	frame[len+5] = FLAG;
 	frame_len = FRAME_SU_LEN + 1 + len;
 
-	DEBUG_PRINT(("PRE SEND sequenceNumber: %d\n", sequenceNumber));
-
-
 	write_msg(*llfd, frame, frame_len, &bytes_written);
-	DEBUG_PRINT(("Sent I\n"));
+	DEBUG_PRINT(("Sent I: %u\n", sequenceNumber));
 
 	// Enable timeout mechanism
 	(void) signal(SIGALRM, timeout_handler);
@@ -261,12 +250,10 @@ int llwrite(uint8_t* buf, int len)
 	// {
 	// }
 
-	DEBUG_PRINT(("Got RR\n"));
 
 	// Update sequence number
 	sequenceNumber = !sequenceNumber;
-
-	DEBUG_PRINT(("POS RR sequenceNumber: %d\n", sequenceNumber));
+	DEBUG_PRINT(("Got RR: %u\n", sequenceNumber));
 
 	// for (unsigned i = 0; i < bytes_read; i++)
 	//     printf("%x", msg[i]);

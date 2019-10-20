@@ -7,6 +7,11 @@
 #include "link_layer.h"
 #include "defs.h"
 
+
+time_t now; // Get the system time
+size_t time_len;
+uint8_t time_buf[64];
+
 void string2ByteArray(char* input, uint8_t* output)
 {
     int loop;
@@ -65,30 +70,13 @@ int main(int argc, char const *argv[])
 
 		//sleep(1);
 
-		// uint8_t buf2[] = {2,0,0,9,0,0,3,0,3};
-		// llwrite(buf2, sizeof(buf2));
+		now = time(0); // Get the system time
+		char* time = asctime(gmtime(&now));
+		time_len = strlen(time);
+		printf("%s: %ld\n", time, time_len);
 
-		// time_t now = time(0); // Get the system time
-		// char* time = asctime(gmtime(&now));
-		// printf("%s\n", time);
-
-
-		// uint8_t time_buf[sizeof(time)];
-		// string2ByteArray(time, time_buf);
-
-		//uint8_t buf3[] = {2,0,0,9,0,0,3,0,3};
-		//llwrite(buf, sizeof(buf));
-
-		/*
-			Sun Oct 20 10:04:28 2019
-
-			7e03000353756e204f637420107e
-		*/
-
-		// for (size_t i = 0; i < sizeof(time_buf); i++)
-		// 	printf("%c",(char)time_buf[i]);
-		// printf("\n");
-		
+		string2ByteArray(time, time_buf);
+		llwrite(time_buf, time_len);
 
 		// call llclose
 	}
