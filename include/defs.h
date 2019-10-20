@@ -30,6 +30,7 @@
 #define WRITE_FAIL 7
 #define READ_FAIL 8
 #define BCC_ERROR 9
+#define DISC_CONN 10
 
 #define FLAG 0x7E
 #define A_SENDER 0x03

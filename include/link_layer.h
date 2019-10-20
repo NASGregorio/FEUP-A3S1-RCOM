@@ -10,7 +10,7 @@ typedef enum com_mode
 } COM_MODE;
 
 int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio);
-int llclose(TERMIOS* oldtio);
+int llclose(TERMIOS* oldtio, COM_MODE mode);
 
 int llwrite(uint8_t* buf, int len);
 int llread();

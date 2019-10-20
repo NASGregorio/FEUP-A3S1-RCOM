@@ -8,11 +8,16 @@
 #include "defs.h"
 
 
+// lidar com REJ
+// permitir erros ao ler no llwrite (caso de desligar o cabo -> nao fazer return)
+// byte stuffing
+
+
 time_t now; // Get the system time
 size_t time_len;
 uint8_t time_buf[64];
 
-void string2ByteArray(char* input, uint8_t* output)
+void string2ByteArray(char* input, uint8_t* output, size_t len)
 {
     int loop;
     int i;
@@ -20,7 +25,7 @@ void string2ByteArray(char* input, uint8_t* output)
     loop = 0;
     i = 0;
     
-    while(input[loop] != '\0')
+    while(loop < len)
     {
         output[i++] = input[loop++];
     }
@@ -58,7 +63,8 @@ int main(int argc, char const *argv[])
 	{
 		while (TRUE)
 		{
-			llread(port_fd);
+			if(llread(port_fd) == DISC_CONN)
+				break;
 		}
 	}
 	
@@ -68,20 +74,16 @@ int main(int argc, char const *argv[])
 		uint8_t buf[] = {1,1,0,6,1,9,9,1};
 		llwrite(buf, sizeof(buf));
 
-		//sleep(1);
-
 		now = time(0); // Get the system time
 		char* time = asctime(gmtime(&now));
-		time_len = strlen(time);
-		printf("%s: %ld\n", time, time_len);
+		time_len = strlen(time) - 1;
 
-		string2ByteArray(time, time_buf);
+		string2ByteArray(time, time_buf, time_len);
 		llwrite(time_buf, time_len);
 
-		// call llclose
 	}
 
-	err = llclose(&oldtio);
+	err = llclose(&oldtio, mode);
 	if(err != OK)
 		return err;
 
