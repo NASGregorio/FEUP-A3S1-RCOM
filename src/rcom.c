@@ -8,11 +8,8 @@
 #include "defs.h"
 
 
-// permitir erros ao ler no llwrite (caso de desligar o cabo -> nao fazer return)
+// application layer
 // byte stuffing
-
-// trama duplicada
-
 
 time_t now; // Get the system time
 size_t time_len;
@@ -32,8 +29,54 @@ void string2ByteArray(char* input, uint8_t* output, size_t len)
     }
 }
 
+int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
+{
+	size_t extra = 0;
+
+	for (size_t i = 0; i < len; i++)
+	{
+		if ( msg[i] == FLAG || msg[i] == ESCAPE )
+			extra++;
+	}
+
+	*new_len = len + extra;
+
+	for (size_t i = 0; i < len; i++)
+		printf("%02x", msg[i]);
+	printf("\n");
+
+	for (size_t i = *new_len; i > 0; i--)
+	{
+		if ( msg[i] == FLAG || msg[i] == ESCAPE )
+		{
+			msg[i] ^= BYTE_XOR;
+			msg[i-1] ^= ESCAPE;
+			i--;
+		}
+	}
+
+	printf("\n");	
+	printf("\n");	
+	printf("\n");	
+	printf("\n");	
+
+	
+	for (size_t i = 0; i < *new_len; i++)
+		printf("%02x", msg[i]);
+	printf("\n");	
+
+	return OK;
+}
+
 int main(int argc, char const *argv[])
 {
+	uint8_t buf[128] = {1,1,126,1,1,126,1,1,125};
+	//printf("%x\n",buf);
+
+	size_t newlen = 0;
+	byte_stuffing(&newlen, buf, 9);
+
+
     if (argc < 3)
 	{
         printf("Usage: link_layer <port number 0|1|2> <mode T|R>\n");
@@ -72,15 +115,22 @@ int main(int argc, char const *argv[])
 	else if (mode == TRANSMITTER)
 	{
 		// write stuff
-		uint8_t buf[] = {1,1,0,6,1,9,9,1};
-		llwrite(buf, sizeof(buf));
+		
+		uint8_t buf[128] = {1,1,126,1,1,126,1,1,125};
+		//printf("%x\n",buf);
 
-		now = time(0); // Get the system time
-		char* time = asctime(gmtime(&now));
-		time_len = strlen(time) - 1;
+		size_t newlen = 0;
+		byte_stuffing(&newlen, buf, 128);
+		//printf("%x\n",buf);
+		
+		//llwrite(buf, sizeof(buf));
 
-		string2ByteArray(time, time_buf, time_len);
-		llwrite(time_buf, time_len);
+		// now = time(0); // Get the system time
+		// char* time = asctime(gmtime(&now));
+		// time_len = strlen(time) - 1;
+
+		// string2ByteArray(time, time_buf, time_len);
+		// llwrite(time_buf, time_len);
 
 	}
 

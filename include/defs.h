@@ -20,6 +20,8 @@
 #define TIMEOUT 3
 #define MAX_RETRIES 3
 
+#define MAX_FRAME_LEN 512
+
 #define OK 0
 #define BAD_ARGS 1
 #define OPEN_PORT_FAIL 2
@@ -30,8 +32,12 @@
 #define WRITE_FAIL 7
 #define READ_FAIL 8
 #define BCC_ERROR 9
-#define DISC_CONN 10
+#define BCC2_ERROR 10
+#define DISC_CONN 11
+#define DUP_FRAME 12
 
+#define BYTE_XOR 0x20
+#define ESCAPE 0x7d
 #define FLAG 0x7E
 #define A_SENDER 0x03
 #define A_RECEIVER 0x01

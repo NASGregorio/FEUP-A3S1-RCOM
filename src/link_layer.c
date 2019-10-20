@@ -18,8 +18,8 @@ unsigned sequenceNumber = 0;
 int bytes_written;
 int bytes_read;
 
-uint8_t frame[255];
-size_t frame_len = 255;
+uint8_t frame[MAX_FRAME_LEN];
+size_t frame_len = MAX_FRAME_LEN;
 
 uint8_t frame_SU[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
 uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
@@ -39,15 +39,6 @@ uint8_t BCC2_generator(uint8_t* msg, size_t len)
 
 int check_frame_errors(uint8_t* msg, size_t len, uint8_t expected_addr, uint8_t expected_ctrl, int check_bcc, int check_bcc2)
 {
-	// if(msg[1] != expected_addr)
-	// 	printf("ADDRESS\n");
-	// if(msg[2] != expected_ctrl)
-	// 	printf("CONTROL\n");
-	// if((check_bcc && msg[3] != (msg[1] ^ msg[2])))
-	// 	printf("BCC\n");
-	// if((check_bcc2 && msg[len - 2] != BCC2_generator(&frame[4], len - FRAME_SU_LEN - 1)))
-	// 	printf("BCC2\n");
-		
 	return
 		(	msg[1] != expected_addr ||	// Wrong address field
 			msg[2] != expected_ctrl ||  // Wrong control field
@@ -55,6 +46,73 @@ int check_frame_errors(uint8_t* msg, size_t len, uint8_t expected_addr, uint8_t 
 			(check_bcc2 && msg[len - 2] != BCC2_generator(&frame[4], len - FRAME_SU_LEN - 1))
 		);
 }
+
+int check_bcc_errors(uint8_t* msg, size_t len, int check_bcc, int check_bcc2)
+{
+	if((check_bcc && msg[3] != (msg[1] ^ msg[2])))
+		return BCC_ERROR;
+	if((check_bcc2 && msg[len - 2] != BCC2_generator(&frame[4], len - FRAME_SU_LEN - 1)))
+		return BCC2_ERROR;
+
+	return OK;
+}
+
+int check_frame_address(uint8_t* msg, uint8_t expected_addr)
+{
+	return msg[1] != expected_addr;
+}
+
+int check_frame_control(uint8_t* msg, uint8_t expected_ctrl)
+{
+	return (msg[2] == expected_ctrl) ? OK : DUP_FRAME;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
+// {
+// 	size_t extra = 0;
+
+// 	for (size_t i = 0; i < len; i++)
+// 	{
+// 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
+// 			extra++;
+// 	}
+
+// 	*new_len = len + extra;
+
+// 	for (size_t i = 0; i < len; i++)
+// 		printf("%02x\n", msg[i]);
+
+// 	for (size_t i = *new_len; i > 0; i--)
+// 	{
+// 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
+// 		{
+// 			msg[i] ^= BYTE_XOR;
+// 			msg[i-1] ^= ESCAPE;
+// 			i--;
+// 		}
+// 	}
+	
+// 	for (size_t i = 0; i < *new_len; i++)
+// 		printf("%02x\n", msg[i]);
+
+// 	return OK;
+// }
+
+// int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len)
+// {
+// 	// for (i = ; i < len - 1; ++i) {
+// 	// 	if (msg[i] ==  ESCAPE)
+// 	// 	{
+// 	// 		memmove(buffer+i, buffer+i+1, (*size)-i);
+// 	// 		--(*size);
+
+// 	// 		buffer[i] = (buffer[i] ^ STUFFING);
+// 	// 	}
+// 	// }
+// 	return OK;
+// }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -66,6 +124,10 @@ void timeout_handler()
 		alarm(0);
 		return;
 	}
+
+	// --DEBUG--
+	frame[3] = (frame[1] ^ frame[2]); //DEBUG: 
+	// --DEBUG--
 
 	printf("Retrying... (%d)\n",++retries_count);
 	write_msg(*llfd, frame, frame_len, &bytes_written);
@@ -79,6 +141,48 @@ int return_on_timeout()
 		printf("Connection timeout\n");
 		return EXIT_TIMEOUT;
 	}
+	return OK;
+}
+
+int transmitter_set()
+{
+	DEBUG_PRINT(("--------------------\n"));
+
+	frame[0] = FLAG;
+	frame[1] = A_SENDER;
+	frame[2] = C_SET;
+	frame[3] = (frame[1] ^ frame[2]);
+	frame[4] = FLAG;
+	frame_len = FRAME_SU_LEN;
+
+	write_msg(*llfd, frame, frame_len, &bytes_written);
+	DEBUG_PRINT(("Sent SET\n"));
+
+	// Enable timeout mechanism
+	(void) signal(SIGALRM, timeout_handler);
+	alarm(TIMEOUT);
+
+	// Wait for UA
+	uint8_t msg[255];
+	int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
+
+	// Exceeded timeout time, exit.
+	if(err == EXIT_TIMEOUT)
+		return err;
+
+	// Disable timeout mechanism
+	alarm(0);
+
+	// Check UA for errors
+	if(check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, C_UA, 1, 0))
+	{
+		DEBUG_PRINT(("Error SET\n"));
+		timeout_handler();
+	}
+
+	DEBUG_PRINT(("Got UA\n"));
+	printf("Starting transfer...\n");
+
 	return OK;
 }
 
@@ -107,19 +211,38 @@ void frame_set_reply()
 void frame_i_reply()
 {
 	// Check frame for errors
-	if(check_frame_errors(frame, frame_len, A_SENDER, (sequenceNumber ? C_I_0 : C_I_1), 1, 1))
+	int err = check_bcc_errors(frame, frame_len, 1, 1);
+
+	if(err == BCC_ERROR || check_frame_address(frame, A_SENDER))
 	{
 		DEBUG_PRINT(("Error I: %u\n", sequenceNumber));
-
-		// SEND REJ
-		frame_RR_REJ[1] = A_SENDER;
-        frame_RR_REJ[2] = (sequenceNumber ? C_REJ_1 : C_REJ_0);
-    	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
-
-		write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
-		DEBUG_PRINT(("Sent REJ: %u\n", sequenceNumber));
 	}
-	else
+	else if(err == BCC2_ERROR)
+	{
+		if(check_frame_control(frame, (sequenceNumber ? C_RR_1 : C_RR_0) == OK))
+		{
+			// SEND REJ
+			frame_RR_REJ[1] = A_SENDER;
+			frame_RR_REJ[2] = (sequenceNumber ? C_REJ_1 : C_REJ_0);
+			frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+
+			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
+			DEBUG_PRINT(("Sent REJ: %u\n", sequenceNumber));
+		}
+		
+		else
+		{
+			frame_RR_REJ[1] = A_SENDER;
+			frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
+			frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+
+			sequenceNumber = !sequenceNumber;
+
+			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
+			DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
+		}
+	}
+	else if(err == OK)
 	{
 		DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
 		frame_RR_REJ[1] = A_SENDER;
@@ -127,11 +250,14 @@ void frame_i_reply()
     	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
 		sequenceNumber = !sequenceNumber;
-
-		// Print frame data
-		for (size_t i = 4; i < frame_len-2; i++)
-			printf("%c",(char)(frame[i]));
-		printf("\n");
+		if(check_frame_control(frame, (sequenceNumber ? C_RR_1 : C_RR_0) == OK))
+		{
+			// TODO: Connection point to application layer
+			// Print frame data
+			for (size_t i = 4; i < frame_len-2; i++)
+				printf("%c",(char)(frame[i]));
+			printf("\n");
+		}
 
 		write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
 		DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
@@ -180,48 +306,6 @@ int frame_disc_reply()
 		}
 		
 	}
-}
-
-int transmitter_set()
-{
-	DEBUG_PRINT(("--------------------\n"));
-
-	frame[0] = FLAG;
-	frame[1] = A_SENDER;
-	frame[2] = C_SET;
-	frame[3] = (frame[1] ^ frame[2]);
-	frame[4] = FLAG;
-	frame_len = FRAME_SU_LEN;
-
-	write_msg(*llfd, frame, frame_len, &bytes_written);
-	DEBUG_PRINT(("Sent SET\n"));
-
-	// Enable timeout mechanism
-	(void) signal(SIGALRM, timeout_handler);
-	alarm(TIMEOUT);
-
-	// Wait for UA
-	uint8_t msg[255];
-	int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
-
-	// Exceeded timeout time, exit.
-	if(err == EXIT_TIMEOUT)
-		return err;
-
-	// Disable timeout mechanism
-	alarm(0);
-
-	// Check UA for errors
-	if(check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, C_UA, 1, 0))
-	{
-		DEBUG_PRINT(("Error SET\n"));
-		timeout_handler();
-	}
-
-	DEBUG_PRINT(("Got UA\n"));
-	printf("Starting transfer...\n");
-
-	return OK;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -336,7 +420,10 @@ int llwrite(uint8_t* buf, int len)
 
 	double r = (double)rand()/RAND_MAX;
 	if(r < 0.3)
+	{
+		printf("DEBUG ERROR RANDOM\n");
 		frame[3] = 0;
+	}
 
 	for (size_t i = 0; i < len; i++)
 		frame[i+4] = buf[i];
@@ -382,7 +469,7 @@ int llwrite(uint8_t* buf, int len)
 		else if (!check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, (sequenceNumber ? C_REJ_0 : C_REJ_1), 1, 0))
 		{
 			DEBUG_PRINT(("Got REJ: %u\n", sequenceNumber));
-			frame[3] = (frame[1] ^ frame[2]);
+			frame[3] = (frame[1] ^ frame[2]); //DEBUG: 
 			write_msg(*llfd, frame, frame_len, &bytes_written);
 			alarm(TIMEOUT);
 		}
