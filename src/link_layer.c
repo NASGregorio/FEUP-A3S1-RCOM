@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "defs.h"
@@ -20,8 +21,8 @@ int bytes_read;
 uint8_t frame[255];
 size_t frame_len = 255;
 
-uint8_t frame_SU[FRAME_SU_LEN] = { FLAG, A_RECEIVER, -1, -1, FLAG };
-uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, A_RECEIVER, -1, -1, FLAG };
+uint8_t frame_SU[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
+uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +39,15 @@ uint8_t BCC2_generator(uint8_t* msg, size_t len)
 
 int check_frame_errors(uint8_t* msg, size_t len, uint8_t expected_addr, uint8_t expected_ctrl, int check_bcc, int check_bcc2)
 {
+	// if(msg[1] != expected_addr)
+	// 	printf("ADDRESS\n");
+	// if(msg[2] != expected_ctrl)
+	// 	printf("CONTROL\n");
+	// if((check_bcc && msg[3] != (msg[1] ^ msg[2])))
+	// 	printf("BCC\n");
+	// if((check_bcc2 && msg[len - 2] != BCC2_generator(&frame[4], len - FRAME_SU_LEN - 1)))
+	// 	printf("BCC2\n");
+		
 	return
 		(	msg[1] != expected_addr ||	// Wrong address field
 			msg[2] != expected_ctrl ||  // Wrong control field
@@ -76,18 +86,19 @@ int return_on_timeout()
 
 void frame_set_reply()
 {
-	if(check_frame_errors(frame, FRAME_SU_LEN, A_SENDER, C_SET, 0, 0))
+	if(check_frame_errors(frame, FRAME_SU_LEN, A_SENDER, C_SET, 1, 0))
 	{
-		DEBUG_PRINT(("Error in SET frame\n"));
+		DEBUG_PRINT(("Error SET\n"));
 		return;
 	}
 
 	DEBUG_PRINT(("Got SET\n"));
 
+	frame_SU[1] = A_SENDER;
 	frame_SU[2] = C_UA;
 	frame_SU[3] = frame_SU[1] ^ frame_SU[2];
 
-	write_msg(*llfd, frame_SU, sizeof(frame_SU), &bytes_written);
+	write_msg(*llfd, frame_SU, FRAME_SU_LEN, &bytes_written);
 	DEBUG_PRINT(("Sent UA\n"));
 
 	printf("Incoming data...\n");
@@ -95,57 +106,79 @@ void frame_set_reply()
 
 void frame_i_reply()
 {
-	// Check SET for errors
-
-	if(check_frame_errors(frame, frame_len, A_SENDER, (sequenceNumber ? C_I_0 : C_I_1), 0, 1))
+	// Check frame for errors
+	if(check_frame_errors(frame, frame_len, A_SENDER, (sequenceNumber ? C_I_0 : C_I_1), 1, 1))
 	{
-		DEBUG_PRINT(("Error in I frame\n"));
+		DEBUG_PRINT(("Error I: %u\n", sequenceNumber));
 
-        // Set frame number
+		// SEND REJ
+		frame_RR_REJ[1] = A_SENDER;
         frame_RR_REJ[2] = (sequenceNumber ? C_REJ_1 : C_REJ_0);
+    	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+
+		write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
+		DEBUG_PRINT(("Sent REJ: %u\n", sequenceNumber));
 	}
+	else
+	{
+		DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
+		frame_RR_REJ[1] = A_SENDER;
+    	frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
+    	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
-	DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
+		sequenceNumber = !sequenceNumber;
 
-    frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
-    frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+		// Print frame data
+		for (size_t i = 4; i < frame_len-2; i++)
+			printf("%c",(char)(frame[i]));
+		printf("\n");
 
-	sequenceNumber = !sequenceNumber;
-
-	// Print frame data
-	for (size_t i = 4; i < frame_len-2; i++)
-		printf("%c",(char)(frame[i]));
-	printf("\n");
-
-	write_msg(*llfd, frame_RR_REJ, sizeof(frame_RR_REJ), &bytes_written);
-	DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
-
+		write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
+		DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
+	}
 }
 
-void frame_disc_reply()
+int frame_disc_reply()
 {
 	if(check_frame_errors(frame, FRAME_SU_LEN, A_SENDER, C_DISC, 1, 0))
 	{
-		DEBUG_PRINT(("Error in DISC frame\n"));
-		return;
+		DEBUG_PRINT(("Error DISC\n"));
+		return BCC_ERROR;
 	}
 
 	DEBUG_PRINT(("Got DISC\n"));
 
+	frame_SU[1] = A_RECEIVER;
 	frame_SU[2] = C_DISC;
 	frame_SU[3] = frame_SU[1] ^ frame_SU[2];
 
 	write_msg(*llfd, frame_SU, FRAME_SU_LEN, &bytes_written);
 	DEBUG_PRINT(("Sent DISC\n"));
 
-	// Wait for UA
-	uint8_t msg[255];
-	read_msg(*llfd, msg, &bytes_read, 255, NULL);
 
-	// Check I for errors
-	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, C_UA, 1, 0))
+	while(1)
 	{
-		DEBUG_PRINT(("Error in UA\n"));
+		uint8_t msg[255];
+		read_msg(*llfd, msg, &bytes_read, 255, NULL);
+
+		// If TRANSMITTER DISC - repeat RECEIVER DISC 
+		if(!check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, C_DISC, 1, 0))
+		{
+			write_msg(*llfd, frame_SU, FRAME_SU_LEN, &bytes_written);
+			DEBUG_PRINT(("Sent DISC\n"));
+		}
+		// If UA - disconnect
+		else if (!check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, C_UA, 1, 0))
+		{
+			DEBUG_PRINT(("Got UA\n"));
+			return DISC_CONN;
+		}
+		// If anything else - exit
+		else
+		{
+			DEBUG_PRINT(("Error UA\n"));
+		}
+		
 	}
 }
 
@@ -179,9 +212,9 @@ int transmitter_set()
 	alarm(0);
 
 	// Check UA for errors
-	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, C_UA, 1, 0))
+	if(check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, C_UA, 1, 0))
 	{
-		DEBUG_PRINT(("Error in SET\n"));
+		DEBUG_PRINT(("Error SET\n"));
 		timeout_handler();
 	}
 
@@ -197,6 +230,8 @@ int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio)
 {
 	if( fcntl(*fd, F_GETFD) == -1 && errno == EBADF )
 	{
+		srand(time(NULL));
+
 		int err = open_port(port, fd);
 		if(err != OK)
 			return err;
@@ -259,7 +294,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 		// Check DISC for errors
 		if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, C_DISC, 1, 0))
 		{
-			DEBUG_PRINT(("Error in DISC\n"));
+			DEBUG_PRINT(("Error DISC\n"));
 			timeout_handler();
 		}
 		DEBUG_PRINT(("Got DISC\n"));
@@ -275,6 +310,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 		// send UA frame
 		write_msg(*llfd, frame, frame_len, &bytes_written);
 		DEBUG_PRINT(("Sent UA\n"));
+		DEBUG_PRINT(("--------------------\n"));
 	}
 
 	printf("Transfer complete\n");
@@ -298,6 +334,10 @@ int llwrite(uint8_t* buf, int len)
 	frame[2] = (sequenceNumber ? C_I_1 : C_I_0);
 	frame[3] = (frame[1] ^ frame[2]);
 
+	double r = (double)rand()/RAND_MAX;
+	if(r < 0.3)
+		frame[3] = 0;
+
 	for (size_t i = 0; i < len; i++)
 		frame[i+4] = buf[i];
 
@@ -318,28 +358,40 @@ int llwrite(uint8_t* buf, int len)
 	(void) signal(SIGALRM, timeout_handler);
 	alarm(TIMEOUT);
 
-	// Wait for UA
-	uint8_t msg[255];
-	int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
-
-	// Exceeded timeout time, exit.
-	if(err == EXIT_TIMEOUT)
-		return err;
-
-	// Disable timeout mechanism
-	alarm(0);
-
-	// Check I for errors
-
-	if(check_frame_errors(msg, FRAME_SU_LEN, A_RECEIVER, (sequenceNumber ? C_RR_0 : C_RR_1), 1, 0))
+	while(1)
 	{
-		DEBUG_PRINT(("Error in RR\n"));
-		timeout_handler();
-	}
+		// Wait for UA
+		uint8_t msg[255];
+		int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
 
-	// Update sequence number
-	sequenceNumber = !sequenceNumber;
-	DEBUG_PRINT(("Got RR: %u\n", sequenceNumber));
+		// Exceeded timeout time, exit.
+		if(err == EXIT_TIMEOUT)
+			return err;
+
+		// Disable timeout mechanism
+		alarm(0);
+
+		// Check I for errors
+		if(!check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, (sequenceNumber ? C_RR_0 : C_RR_1), 1, 0))
+		{
+			// Update sequence number
+			sequenceNumber = !sequenceNumber;
+			DEBUG_PRINT(("Got RR: %u\n", sequenceNumber));
+			return OK;
+		}
+		else if (!check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, (sequenceNumber ? C_REJ_0 : C_REJ_1), 1, 0))
+		{
+			DEBUG_PRINT(("Got REJ: %u\n", sequenceNumber));
+			frame[3] = (frame[1] ^ frame[2]);
+			write_msg(*llfd, frame, frame_len, &bytes_written);
+			alarm(TIMEOUT);
+		}
+		else
+		{
+			DEBUG_PRINT(("Error RR\n"));
+			timeout_handler();
+		}
+	}
 
 	return OK;
 }
@@ -354,9 +406,6 @@ int llread()
 
 	frame_len = bytes_read;
 
-    if(!BCC_CHECK(frame[1], frame[2], frame[3])) //TODO possivel problemas - impede Trama REJ
-        return BCC_ERROR;
-
     uint8_t ctrl_field = frame[2];
 
     switch (ctrl_field)
@@ -369,8 +418,7 @@ int llread()
         frame_i_reply();
         break;
     case C_DISC:
-		frame_disc_reply();
-		return DISC_CONN;
+		return frame_disc_reply();
         break;
     default:
         break;

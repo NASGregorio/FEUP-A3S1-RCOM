@@ -8,9 +8,10 @@
 #include "defs.h"
 
 
-// lidar com REJ
 // permitir erros ao ler no llwrite (caso de desligar o cabo -> nao fazer return)
 // byte stuffing
+
+// trama duplicada
 
 
 time_t now; // Get the system time
