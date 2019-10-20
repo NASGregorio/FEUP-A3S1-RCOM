@@ -38,6 +38,8 @@ int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
 			extra++;
 	}
+	printf("%lu\n", extra);
+
 
 	*new_len = len + extra;
 
@@ -45,14 +47,22 @@ int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
 		printf("%02x", msg[i]);
 	printf("\n");
 
-	for (size_t i = *new_len; i > 0; i--)
+
+	size_t new_pos = len - 1 + extra;
+	for (size_t i = len - 1; i > 0; i--)
 	{
 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
 		{
-			msg[i] ^= BYTE_XOR;
-			msg[i-1] ^= ESCAPE;
-			i--;
+			msg[new_pos] = msg[i] ^ BYTE_XOR;
+			msg[new_pos - 1] = ESCAPE;
+			new_pos -= 2;
 		}
+		else
+		{
+			msg[new_pos] = msg[i];
+			new_pos--;
+		}
+		
 	}
 
 	printf("\n");	
