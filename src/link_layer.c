@@ -69,50 +69,96 @@ int check_frame_control(uint8_t* msg, uint8_t expected_ctrl)
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
-// {
-// 	size_t extra = 0;
+int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
+{
+	size_t extra = 0;
 
-// 	for (size_t i = 0; i < len; i++)
-// 	{
-// 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
-// 			extra++;
-// 	}
+	for (size_t i = 0; i < len; i++)
+	{
+		if ( msg[i] == FLAG || msg[i] == ESCAPE )
+			extra++;
+	}
+	printf("%u\n", extra);
+	// printf("%u\n", msg[0]);
 
-// 	*new_len = len + extra;
 
-// 	for (size_t i = 0; i < len; i++)
-// 		printf("%02x\n", msg[i]);
+	*new_len = len + extra;
 
-// 	for (size_t i = *new_len; i > 0; i--)
-// 	{
-// 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
-// 		{
-// 			msg[i] ^= BYTE_XOR;
-// 			msg[i-1] ^= ESCAPE;
-// 			i--;
-// 		}
-// 	}
+	// for (size_t i = 0; i < len; i++)
+	// 	printf("%02x", msg[i]);
+	// printf("\n");
+
+
+	size_t new_pos = len - 1 + extra;
+	for (size_t i = len - 1; i > 0; i--)
+	{
+		if ( msg[i] == FLAG || msg[i] == ESCAPE )
+		{
+			msg[new_pos] = msg[i] ^ BYTE_XOR;
+			msg[new_pos - 1] = ESCAPE;
+			new_pos -= 2;
+		}
+		else
+		{
+			msg[new_pos] = msg[i];
+			new_pos--;
+		}
+
+	}
+
+	// printf("\n");
+	// printf("\n");
+	// printf("\n");
+	// printf("\n");
+
+
+	// for (size_t i = 0; i < *new_len; i++)
+	// 	printf("%02x", msg[i]);
+	// printf("\n");
+
+	return OK;
+}
+
+int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len)
+{
+	size_t extra = 0;
+
+	for (size_t i = 0; i < len; i++)
+	{
+		if ( msg[i] == ESCAPE && ( (msg[i+1] == (FLAG ^ BYTE_XOR) ) || (msg[i+1] == (ESCAPE ^ BYTE_XOR) ) ))
+			extra++;
+	}
+	printf("%u \n",extra);
+	*new_len = len - extra;
+
+	uint8_t new_msg[*new_len];
+	size_t j = 0;
+
+	for (size_t i = 0; i < len; i++)
+	{
+		if(msg[i] == ESCAPE)
+		{
+			new_msg[j] = (msg[i+1] ^ BYTE_XOR);
+			i++;
+		}
+		else
+			new_msg[j] = msg[i];
+		j++;
+	}
+
+
+	for (size_t i = 0; i < *new_len; i++)
+	{
+		msg[i] = new_msg[i];
+	}
 	
-// 	for (size_t i = 0; i < *new_len; i++)
-// 		printf("%02x\n", msg[i]);
 
-// 	return OK;
-// }
+	for (size_t i = 0; i < *new_len; i++)
+		printf("%02x", msg[i]);
+	printf("\n");
 
-// int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len)
-// {
-// 	// for (i = ; i < len - 1; ++i) {
-// 	// 	if (msg[i] ==  ESCAPE)
-// 	// 	{
-// 	// 		memmove(buffer+i, buffer+i+1, (*size)-i);
-// 	// 		--(*size);
-
-// 	// 		buffer[i] = (buffer[i] ^ STUFFING);
-// 	// 	}
-// 	// }
-// 	return OK;
-// }
+	return OK;
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -126,7 +172,7 @@ void timeout_handler()
 	}
 
 	// --DEBUG--
-	frame[3] = (frame[1] ^ frame[2]); //DEBUG: 
+	frame[3] = (frame[1] ^ frame[2]); //DEBUG:
 	// --DEBUG--
 
 	printf("Retrying... (%d)\n",++retries_count);
@@ -211,6 +257,14 @@ void frame_set_reply()
 void frame_i_reply()
 {
 	// Check frame for errors
+	DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
+
+	#ifdef ENABLE_STUFF
+	size_t new_msg_len;
+	byte_destuffing(&new_msg_len, &frame[4], frame_len-2);
+	frame_len = FRAME_SU_LEN + 1 + new_msg_len;
+	#endif
+
 	int err = check_bcc_errors(frame, frame_len, 1, 1);
 
 	if(err == BCC_ERROR || check_frame_address(frame, A_SENDER))
@@ -219,7 +273,7 @@ void frame_i_reply()
 	}
 	else if(err == BCC2_ERROR)
 	{
-		if(check_frame_control(frame, (sequenceNumber ? C_RR_1 : C_RR_0) == OK))
+		if(check_frame_control(frame, (sequenceNumber ? C_I_1 : C_I_0) == OK))
 		{
 			// SEND REJ
 			frame_RR_REJ[1] = A_SENDER;
@@ -229,7 +283,7 @@ void frame_i_reply()
 			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
 			DEBUG_PRINT(("Sent REJ: %u\n", sequenceNumber));
 		}
-		
+
 		else
 		{
 			frame_RR_REJ[1] = A_SENDER;
@@ -244,13 +298,13 @@ void frame_i_reply()
 	}
 	else if(err == OK)
 	{
-		DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
+		// DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
 		frame_RR_REJ[1] = A_SENDER;
     	frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
     	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
 		sequenceNumber = !sequenceNumber;
-		if(check_frame_control(frame, (sequenceNumber ? C_RR_1 : C_RR_0) == OK))
+		if(check_frame_control(frame, (sequenceNumber ? C_I_1 : C_I_0) == OK))
 		{
 			// TODO: Connection point to application layer
 			// Print frame data
@@ -287,7 +341,7 @@ int frame_disc_reply()
 		uint8_t msg[255];
 		read_msg(*llfd, msg, &bytes_read, 255, NULL);
 
-		// If TRANSMITTER DISC - repeat RECEIVER DISC 
+		// If TRANSMITTER DISC - repeat RECEIVER DISC
 		if(!check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, C_DISC, 1, 0))
 		{
 			write_msg(*llfd, frame_SU, FRAME_SU_LEN, &bytes_written);
@@ -304,7 +358,7 @@ int frame_disc_reply()
 		{
 			DEBUG_PRINT(("Error UA\n"));
 		}
-		
+
 	}
 }
 
@@ -326,7 +380,7 @@ int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio)
 			return err;
 
 		llfd = fd;
-		
+
 		printf("Connection open\n");
 	}
 
@@ -418,12 +472,12 @@ int llwrite(uint8_t* buf, int len)
 	frame[2] = (sequenceNumber ? C_I_1 : C_I_0);
 	frame[3] = (frame[1] ^ frame[2]);
 
-	double r = (double)rand()/RAND_MAX;
-	if(r < 0.3)
-	{
-		printf("DEBUG ERROR RANDOM\n");
-		frame[3] = 0;
-	}
+	// double r = (double)rand()/RAND_MAX;
+	// if(r < 0.3)
+	// {
+	// 	printf("DEBUG ERROR RANDOM\n");
+	// 	frame[3] = 0;
+	// }
 
 	for (size_t i = 0; i < len; i++)
 		frame[i+4] = buf[i];
@@ -432,8 +486,18 @@ int llwrite(uint8_t* buf, int len)
 	frame[len+5] = FLAG;
 	frame_len = FRAME_SU_LEN + 1 + len;
 
+	#ifdef ENABLE_STUFF
+	size_t new_msg_len;
+	DEBUG_PRINT(("size pre stuffing: %u\n", frame_len));
+	byte_stuffing(&new_msg_len, &frame[4], len-1);
+	DEBUG_PRINT(("size ext stuffing: %u\n", new_msg_len-frame_len));
+	frame_len = FRAME_SU_LEN + 1 + new_msg_len;
+	DEBUG_PRINT(("size pos stuffing: %u\n", frame_len));
+	#endif
+
 	write_msg(*llfd, frame, frame_len, &bytes_written);
 	DEBUG_PRINT(("Sent I: %u\n", sequenceNumber));
+
 
 	#ifdef DEBUG_TTY_CALLS
 	for (size_t i = 4; i < frame_len-2; i++)
@@ -469,7 +533,7 @@ int llwrite(uint8_t* buf, int len)
 		else if (!check_frame_errors(msg, FRAME_SU_LEN, A_SENDER, (sequenceNumber ? C_REJ_0 : C_REJ_1), 1, 0))
 		{
 			DEBUG_PRINT(("Got REJ: %u\n", sequenceNumber));
-			frame[3] = (frame[1] ^ frame[2]); //DEBUG: 
+			frame[3] = (frame[1] ^ frame[2]); //DEBUG:
 			write_msg(*llfd, frame, frame_len, &bytes_written);
 			alarm(TIMEOUT);
 		}
@@ -494,6 +558,8 @@ int llread()
 	frame_len = bytes_read;
 
     uint8_t ctrl_field = frame[2];
+	//DEBUG_PRINT(("C: %u\n",ctrl_field));
+
 
     switch (ctrl_field)
     {

@@ -10,6 +10,8 @@
 
 #define BCC_CHECK(a, c, bcc) ((bcc) == ((a) ^ (c)))
 
+//#define ENABLE_STUFF
+
 #define DEBUG_TTY_CALLS
 #ifdef DEBUG_TTY_CALLS
     #define DEBUG_PRINT(x) printf x
