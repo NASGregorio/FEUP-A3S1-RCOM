@@ -12,9 +12,10 @@ typedef enum com_mode
 int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio);
 int llclose(TERMIOS* oldtio, COM_MODE mode);
 
-int llwrite(uint8_t* buf, int len);
+int llwrite(uint8_t* buf, size_t len);
 int llread();
 
-extern int return_on_timeout();
+int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len, size_t* extra);
+int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len, size_t* extra);
 
 #endif /*__LINK_LAYER_H__*/

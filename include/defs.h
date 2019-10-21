@@ -10,7 +10,8 @@
 
 #define BCC_CHECK(a, c, bcc) ((bcc) == ((a) ^ (c)))
 
-//#define ENABLE_STUFF
+#define ENABLE_STUFF
+//#define TEST_STUFF
 
 #define DEBUG_TTY_CALLS
 #ifdef DEBUG_TTY_CALLS
@@ -37,6 +38,8 @@
 #define BCC2_ERROR 10
 #define DISC_CONN 11
 #define DUP_FRAME 12
+#define FOPEN_FAIL 13
+#define FCLOSE_FAIL 14
 
 #define BYTE_XOR 0x20
 #define ESCAPE 0x7d

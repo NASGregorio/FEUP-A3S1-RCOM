@@ -9,7 +9,7 @@
 
 
 // application layer
-// byte stuffing
+// check sequence number / send REJ on bcc2 error
 
 time_t now; // Get the system time
 size_t time_len;
@@ -29,106 +29,25 @@ void string2ByteArray(char* input, uint8_t* output, size_t len)
     }
 }
 
-// int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
-// {
-// 	size_t extra = 0;
-
-// 	for (size_t i = 0; i < len; i++)
-// 	{
-// 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
-// 			extra++;
-// 	}
-// 	// printf("%u\n", extra);
-// 	// printf("%u\n", msg[0]);
-
-
-// 	*new_len = len + extra;
-
-// 	for (size_t i = 0; i < len; i++)
-// 		printf("%02x", msg[i]);
-// 	printf("\n");
-
-
-// 	size_t new_pos = len - 1 + extra;
-// 	for (size_t i = len - 1; i > 0; i--)
-// 	{
-// 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
-// 		{
-// 			msg[new_pos] = msg[i] ^ BYTE_XOR;
-// 			msg[new_pos - 1] = ESCAPE;
-// 			new_pos -= 2;
-// 		}
-// 		else
-// 		{
-// 			msg[new_pos] = msg[i];
-// 			new_pos--;
-// 		}
-
-// 	}
-
-// 	// printf("\n");
-// 	// printf("\n");
-// 	// printf("\n");
-// 	// printf("\n");
-
-
-// 	for (size_t i = 0; i < *new_len; i++)
-// 		printf("%02x", msg[i]);
-// 	printf("\n");
-
-// 	return OK;
-// }
-
-// int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len)
-// {
-// 	size_t extra = 0;
-
-// 	for (size_t i = 0; i < len; i++)
-// 	{
-// 		if ( msg[i] == ESCAPE && ( (msg[i+1] == (FLAG ^ BYTE_XOR) ) || (msg[i+1] == (ESCAPE ^ BYTE_XOR) ) ))
-// 			extra++;
-// 	}
-// 	printf("%u \n",extra);
-// 	*new_len = len - extra;
-
-// 	uint8_t new_msg[*new_len];
-// 	size_t j = 0;
-
-// 	for (size_t i = 0; i < len; i++)
-// 	{
-// 		if(msg[i] == ESCAPE)
-// 		{
-// 			new_msg[j] = (msg[i+1] ^ BYTE_XOR);
-// 			i++;
-// 		}
-// 		else
-// 			new_msg[j] = msg[i];
-// 		j++;
-// 	}
-
-
-// 	for (size_t i = 0; i < *new_len; i++)
-// 	{
-// 		msg[i] = new_msg[i];
-// 	}
-	
-
-// 	for (size_t i = 0; i < *new_len; i++)
-// 		printf("%02x", msg[i]);
-// 	printf("\n");
-
-// 	return OK;
-// }
-
 int main(int argc, char const *argv[])
 {
-	//uint8_t buf[128] = {1,1,126,1,1,126,1,1,125};
 
-
-	// size_t newlen = 0;
-	// byte_stuffing(&newlen, buf, 9);
-
-	// byte_destuffing(&newlen, buf, newlen);
+	#ifdef TEST_STUFF
+	size_t len = 9;
+	size_t newlen, len_diff;
+	uint8_t buf[128] = {1,1,126,1,1,126,1,1,125};
+	for (size_t i = 0; i < len; i++)
+		DEBUG_PRINT(("%lu: %02x\n", i, buf[i]));
+	DEBUG_PRINT(("STUFF PRE: %lu\n", len));
+	byte_stuffing(&newlen, buf, len, &len_diff);
+	DEBUG_PRINT(("STUFF DIFF: %lu\n", len_diff));
+	DEBUG_PRINT(("STUFF POS: %lu\n", newlen));
+	byte_destuffing(&newlen, buf, newlen, &len_diff);
+	DEBUG_PRINT(("DESTUFF POS: %lu\n", newlen));
+	DEBUG_PRINT(("DESTUFF DIFF: %lu\n", len_diff));
+	for (size_t i = 0; i < newlen; i++)
+		DEBUG_PRINT(("%lu: %02x\n", i, buf[i]));
+	#endif
 
 
     if (argc < 3)
@@ -171,7 +90,7 @@ int main(int argc, char const *argv[])
 		// write stuff
 		
 		#ifdef ENABLE_STUFF
-		uint8_t buf[9] = {1,1,126,1,1,126,1,1,125};
+		uint8_t buf[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
 		#else
 		uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
 		#endif

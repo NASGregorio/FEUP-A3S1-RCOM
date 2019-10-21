@@ -69,27 +69,19 @@ int check_frame_control(uint8_t* msg, uint8_t expected_ctrl)
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
+int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len, size_t* extra)
 {
-	size_t extra = 0;
+	*extra = 0;
 
 	for (size_t i = 0; i < len; i++)
 	{
 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
-			extra++;
+			(*extra)++;
 	}
-	printf("%u\n", extra);
-	// printf("%u\n", msg[0]);
 
+	*new_len = len + *extra;
 
-	*new_len = len + extra;
-
-	// for (size_t i = 0; i < len; i++)
-	// 	printf("%02x", msg[i]);
-	// printf("\n");
-
-
-	size_t new_pos = len - 1 + extra;
+	size_t new_pos = len - 1 + *extra;
 	for (size_t i = len - 1; i > 0; i--)
 	{
 		if ( msg[i] == FLAG || msg[i] == ESCAPE )
@@ -103,33 +95,20 @@ int byte_stuffing(size_t* new_len, uint8_t* msg, size_t len)
 			msg[new_pos] = msg[i];
 			new_pos--;
 		}
-
 	}
-
-	// printf("\n");
-	// printf("\n");
-	// printf("\n");
-	// printf("\n");
-
-
-	// for (size_t i = 0; i < *new_len; i++)
-	// 	printf("%02x", msg[i]);
-	// printf("\n");
-
 	return OK;
 }
 
-int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len)
+int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len, size_t* extra)
 {
-	size_t extra = 0;
+	*extra = 0;
 
 	for (size_t i = 0; i < len; i++)
 	{
 		if ( msg[i] == ESCAPE && ( (msg[i+1] == (FLAG ^ BYTE_XOR) ) || (msg[i+1] == (ESCAPE ^ BYTE_XOR) ) ))
-			extra++;
+			(*extra)++;
 	}
-	printf("%u \n",extra);
-	*new_len = len - extra;
+	*new_len = len - (*extra);
 
 	uint8_t new_msg[*new_len];
 	size_t j = 0;
@@ -146,17 +125,11 @@ int byte_destuffing(size_t* new_len, uint8_t* msg, size_t len)
 		j++;
 	}
 
-
 	for (size_t i = 0; i < *new_len; i++)
 	{
 		msg[i] = new_msg[i];
 	}
 	
-
-	for (size_t i = 0; i < *new_len; i++)
-		printf("%02x", msg[i]);
-	printf("\n");
-
 	return OK;
 }
 
@@ -173,6 +146,7 @@ void timeout_handler()
 
 	// --DEBUG--
 	frame[3] = (frame[1] ^ frame[2]); //DEBUG:
+	frame[frame_len-2] -= 1;
 	// --DEBUG--
 
 	printf("Retrying... (%d)\n",++retries_count);
@@ -258,12 +232,25 @@ void frame_i_reply()
 {
 	// Check frame for errors
 	DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
+	size_t msg_start = 4;
+	size_t msg_len = frame_len - 2;
 
 	#ifdef ENABLE_STUFF
-	size_t new_msg_len;
-	byte_destuffing(&new_msg_len, &frame[4], frame_len-2);
-	frame_len = FRAME_SU_LEN + 1 + new_msg_len;
+	size_t new_msg_len, len_diff;
+	DEBUG_PRINT(("DESTUFF PRE: %lu\n", msg_len));
+	byte_destuffing(&new_msg_len, &frame[msg_start], msg_len, &len_diff);
+	msg_len = new_msg_len;
+	DEBUG_PRINT(("DESTUFF DIFF: %lu\n", len_diff));
+	DEBUG_PRINT(("DESTUFF POS: %lu\n", msg_len));
+	for (size_t i = msg_start; i < msg_len; i++)
+		DEBUG_PRINT(("%02x", frame[i]));
+	DEBUG_PRINT(("\n"));
 	#endif
+
+
+
+
+	frame_len = FRAME_SU_LEN + 1 + msg_len;
 
 	int err = check_bcc_errors(frame, frame_len, 1, 1);
 
@@ -308,7 +295,7 @@ void frame_i_reply()
 		{
 			// TODO: Connection point to application layer
 			// Print frame data
-			for (size_t i = 4; i < frame_len-2; i++)
+			for (size_t i = msg_start; i < msg_len; i++)
 				printf("%c",(char)(frame[i]));
 			printf("\n");
 		}
@@ -463,7 +450,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
     return OK;
 }
 
-int llwrite(uint8_t* buf, int len)
+int llwrite(uint8_t* buf, size_t len)
 {
 	DEBUG_PRINT(("--------------------\n"));
 
@@ -472,28 +459,37 @@ int llwrite(uint8_t* buf, int len)
 	frame[2] = (sequenceNumber ? C_I_1 : C_I_0);
 	frame[3] = (frame[1] ^ frame[2]);
 
-	// double r = (double)rand()/RAND_MAX;
-	// if(r < 0.3)
-	// {
-	// 	printf("DEBUG ERROR RANDOM\n");
-	// 	frame[3] = 0;
-	// }
+	double r = (double)rand()/RAND_MAX;
+	if(r < 0.3)
+	{
+		printf("DEBUG BCC ERROR\n");
+		frame[3] = 0;
+	}
 
 	for (size_t i = 0; i < len; i++)
 		frame[i+4] = buf[i];
 
-	frame[len+4] = BCC2_generator(buf, len);
-	frame[len+5] = FLAG;
-	frame_len = FRAME_SU_LEN + 1 + len;
+	uint8_t bcc2 = BCC2_generator(buf, len);
+	double r2 = (double)rand()/RAND_MAX;
+	if(r >= 0.3 && r2 < 0.3)
+	{
+		printf("DEBUG BCC2\n");
+		bcc2 += 1;
+	}
+	DEBUG_PRINT(("BCC2: %02x\n", bcc2));
 
 	#ifdef ENABLE_STUFF
-	size_t new_msg_len;
-	DEBUG_PRINT(("size pre stuffing: %u\n", frame_len));
-	byte_stuffing(&new_msg_len, &frame[4], len-1);
-	DEBUG_PRINT(("size ext stuffing: %u\n", new_msg_len-frame_len));
-	frame_len = FRAME_SU_LEN + 1 + new_msg_len;
-	DEBUG_PRINT(("size pos stuffing: %u\n", frame_len));
+	size_t new_msg_len, len_diff;
+	DEBUG_PRINT(("STUFF PRE: %lu\n", len));
+	byte_stuffing(&new_msg_len, &frame[4], len, &len_diff);
+	len = new_msg_len;
+	DEBUG_PRINT(("STUFF DIFF: %lu\n", len_diff));
+	DEBUG_PRINT(("STUFF POS: %lu\n", len));
 	#endif
+
+	frame[len+4] = bcc2;
+	frame[len+5] = FLAG;
+	frame_len = FRAME_SU_LEN + 1 + len;
 
 	write_msg(*llfd, frame, frame_len, &bytes_written);
 	DEBUG_PRINT(("Sent I: %u\n", sequenceNumber));
