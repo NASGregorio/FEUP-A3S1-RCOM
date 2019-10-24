@@ -11,6 +11,8 @@
 // application layer
 // check sequence number / send REJ on bcc2 error
 
+//TODO check disc on transmitter
+
 time_t now; // Get the system time
 size_t time_len;
 uint8_t time_buf[64];
@@ -29,24 +31,37 @@ void string2ByteArray(char* input, uint8_t* output, size_t len)
     }
 }
 
+
 int main(int argc, char const *argv[])
 {
 
-	#ifdef TEST_STUFF
-	size_t len = 9;
-	size_t newlen, len_diff;
-	uint8_t buf[128] = {1,1,126,1,1,126,1,1,125};
-	for (size_t i = 0; i < len; i++)
-		DEBUG_PRINT(("%lu: %02x\n", i, buf[i]));
-	DEBUG_PRINT(("STUFF PRE: %lu\n", len));
-	byte_stuffing(&newlen, buf, len, &len_diff);
-	DEBUG_PRINT(("STUFF DIFF: %lu\n", len_diff));
-	DEBUG_PRINT(("STUFF POS: %lu\n", newlen));
-	byte_destuffing(&newlen, buf, newlen, &len_diff);
-	DEBUG_PRINT(("DESTUFF POS: %lu\n", newlen));
-	DEBUG_PRINT(("DESTUFF DIFF: %lu\n", len_diff));
-	for (size_t i = 0; i < newlen; i++)
-		DEBUG_PRINT(("%lu: %02x\n", i, buf[i]));
+	#ifdef DEBUG_MAIN_STUFFING
+	uint8_t len = 11;
+	uint8_t msg[] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
+	uint8_t BCC2 = msg[0];
+	for (size_t i = 1; i < len; i++)
+	{
+		BCC2 ^= msg[i];
+	}
+
+	size_t frame_len = FRAME_I_LEN + len;
+	uint8_t buf[128] = {FLAG, A_SENDER, C_I_0, A_SENDER ^ C_I_0, (uint8_t)'a', 1,1,126,1,1,126,1,1,125, (uint8_t)'z', BCC2, FLAG};
+
+	for (size_t i = 0; i < frame_len; i++)
+		DEBUG_PRINT(("%02x ", buf[i]));
+	DEBUG_PRINT(("\n"));
+
+	byte_stuffing(buf, &frame_len);
+
+	for (size_t i = 0; i < frame_len; i++)
+		DEBUG_PRINT(("%02x ", buf[i]));
+	DEBUG_PRINT(("\n"));
+
+	byte_destuffing(buf, &frame_len);
+
+	for (size_t i = 0; i < frame_len; i++)
+		DEBUG_PRINT(("%02x ", buf[i]));
+	DEBUG_PRINT(("\n"));
 	#endif
 
 
@@ -90,7 +105,8 @@ int main(int argc, char const *argv[])
 		// write stuff
 		
 		#ifdef ENABLE_STUFF
-		uint8_t buf[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
+		//uint8_t buf[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
+		uint8_t buf[3] = {(uint8_t)'a',126,(uint8_t)'z'};
 		#else
 		uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
 		#endif

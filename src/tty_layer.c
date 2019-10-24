@@ -177,6 +177,9 @@ int read_msg(int fd, uint8_t* msg, int* br, unsigned maxLength, int (*func)(void
 		if(*br == 0 && buf[0] != FLAG)
 			continue;
 
+		if(*br == 1 && msg[*br - 1] == FLAG && buf[0] == FLAG)
+			continue;
+
 		msg[*br] = buf[0];
 
 		if( (*br > 1 && msg[*br - 1] != FLAG && msg[*br] == FLAG) || *br == maxLength )

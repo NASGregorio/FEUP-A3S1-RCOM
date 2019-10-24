@@ -10,12 +10,12 @@
 #include "app_layer.h"
 #include "defs.h"
 
-uint8_t package[];
+//uint8_t package[];
 
 int transferFile(int port, char *path){
 
     //The file we want to send is opened in read only mode
-    FILE* file = fopen(path, 'r');
+    FILE* file = fopen(path, "r");
     if(file == NULL){
         printf("Failed to open file");
         return FOPEN_FAIL;
@@ -23,7 +23,7 @@ int transferFile(int port, char *path){
     
     int port_fd;
 	TERMIOS oldtio;
-    uint8_t* buffer;
+    //uint8_t* buffer;
 
     //The port is opened to begin transfering the file
     int err = llopen(port, 0, &port_fd, &oldtio);

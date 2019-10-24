@@ -2,16 +2,25 @@
 #define __DEFS_H__
 
 #define BAUDRATE B38400
-#define FRAME_SU_LEN 5
-#define FRAME_I_LEN 8
 #define TTYS0 "/dev/ttyS0"
 #define TTYS1 "/dev/ttyS1"
 #define TTYS2 "/dev/ttyS2"
 
-#define BCC_CHECK(a, c, bcc) ((bcc) == ((a) ^ (c)))
+#define FRAME_SU_LEN 5
+#define FRAME_I_LEN 6
+#define FRAME_POS_A 1
+#define FRAME_POS_C 2
+#define FRAME_POS_BCC 3
+#define FRAME_POS_D 4
+#define FRAME_OFFSET_BCC2 2
+
+
 
 #define ENABLE_STUFF
-//#define TEST_STUFF
+//#define DEBUG_BCC_ERROR
+#define DEBUG_BCC2_ERROR
+//#define DEBUG_MAIN_STUFFING
+
 
 #define DEBUG_TTY_CALLS
 #ifdef DEBUG_TTY_CALLS
@@ -34,12 +43,14 @@
 #define INVALID_FD 6
 #define WRITE_FAIL 7
 #define READ_FAIL 8
-#define BCC_ERROR 9
-#define BCC2_ERROR 10
-#define DISC_CONN 11
-#define DUP_FRAME 12
-#define FOPEN_FAIL 13
-#define FCLOSE_FAIL 14
+#define ADR_ERROR 9
+#define CTR_ERROR 10
+#define BCC_ERROR 11
+#define BCC2_ERROR 12
+#define DISC_CONN 13
+#define DUP_FRAME 14
+#define FOPEN_FAIL 15
+#define FCLOSE_FAIL 16
 
 #define BYTE_XOR 0x20
 #define ESCAPE 0x7d
