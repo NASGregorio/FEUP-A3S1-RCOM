@@ -14,10 +14,6 @@
 #define FRAME_POS_D 4
 #define FRAME_OFFSET_BCC2 2
 
-
-
-#define ENABLE_STUFF
-
 #define TIMEOUT 3
 #define MAX_RETRIES 3
 

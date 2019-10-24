@@ -241,17 +241,14 @@ void frame_set_reply()
 
 void frame_i_reply()
 {
-	// Check frame for errors
-	DEBUG_PRINT(("Got I: %u\n", sequenceNumber));
-
 	#ifdef ENABLE_DEBUG
 	size_t pre_stuffing_size = frame_len;
 	#endif
 
 	byte_destuffing(frame, &frame_len);
 
-	#ifdef ENABLE_STUFF
-	DEBUG_PRINT(("DESTUFFING PRE: %u | POS: %u\n", pre_stuffing_size, frame_len));
+	#ifdef ENABLE_DEBUG
+	DEBUG_PRINT(("DESTUFFING PRE: %lu | POS: %lu\n", pre_stuffing_size, frame_len));
 	for (size_t i = 0; i < frame_len; i++)
 		DEBUG_PRINT(("%02x", frame[i]));
 	DEBUG_PRINT(("\n"));
@@ -261,21 +258,23 @@ void frame_i_reply()
 	int err = check_frame_bcc(frame, &bcc);
 	if(err != OK)
 	{
-		DEBUG_PRINT(("Error I %u | BCC CALC: %02x | BCC RCV: %02x\n", sequenceNumber, bcc, frame[FRAME_POS_BCC]));
+		DEBUG_PRINT(("Error I | BCC CALC: %02x | BCC RCV: %02x\n", bcc, frame[FRAME_POS_BCC]));
 		return;
 	}
 	err = check_frame_address(frame, A_SENDER);
 	if(err != OK)
 	{
-		DEBUG_PRINT(("Error I %u | ADDRESS\n", sequenceNumber));
+		DEBUG_PRINT(("Error | ADDRESS\n"));
 		return;
 	}
+
+	DEBUG_PRINT(("Got I: %u | Have: %u\n", (frame[FRAME_POS_C] == C_I_1 ? 1 : 0), sequenceNumber));
 
 	uint8_t bcc2;
 	err = check_frame_bcc2(frame, frame_len, &bcc2);
 	if(err == BCC2_ERROR)
 	{
-		DEBUG_PRINT(("Error I: %u | BCC2: %02x\n", sequenceNumber, bcc2));
+		DEBUG_PRINT(("Error I | BCC2: %02x\n", bcc2));
 		if(check_frame_control(frame, (sequenceNumber == 1 ? C_I_0 : C_I_1) == OK))
 		{
 			// SEND REJ
@@ -290,7 +289,7 @@ void frame_i_reply()
 		else
 		{
 			frame_RR_REJ[1] = A_SENDER;
-			frame_RR_REJ[2] = (sequenceNumber = 1 ? C_RR_1 : C_RR_0);
+			frame_RR_REJ[2] = (sequenceNumber == 1 ? C_RR_1 : C_RR_0);
 			frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
 
@@ -305,7 +304,7 @@ void frame_i_reply()
     	frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
     	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
 
-		if(check_frame_control(frame, (sequenceNumber = 1 ? C_I_0 : C_I_1) == OK))
+		if(check_frame_control(frame, (sequenceNumber == 1 ? C_I_0 : C_I_1) == OK))
 		{
 			// TODO: Connection point to application layer
 			// Print frame data
@@ -551,8 +550,8 @@ int llwrite(uint8_t* buf, size_t len)
 
 	byte_stuffing(frame, &frame_len);
 
-	#ifdef ENABLE_STUFF
-	DEBUG_PRINT(("STUFFING PRE: %u | POS: %u\n", pre_stuffing_size, frame_len));
+	#ifdef ENABLE_DEBUG
+	DEBUG_PRINT(("STUFFING PRE: %lu | POS: %lu\n", pre_stuffing_size, frame_len));
 	for (size_t i = 0; i < frame_len; i++)
 		DEBUG_PRINT(("%02x", frame[i]));
 	DEBUG_PRINT(("\n"));

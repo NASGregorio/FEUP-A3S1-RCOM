@@ -88,12 +88,12 @@ int main(int argc, char const *argv[])
 	{
 		// write stuff
 		
-		#ifdef ENABLE_STUFF
+		//#ifdef ENABLE_STUFF
 		//uint8_t buf[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
 		uint8_t buf[3] = {(uint8_t)'a',126,(uint8_t)'z'};
-		#else
-		uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
-		#endif
+		// #else
+		// uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
+		// #endif
 
 		err = llwrite(buf, sizeof(buf));
 		err = llwrite(buf, sizeof(buf));

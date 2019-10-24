@@ -65,7 +65,7 @@ void rm_bcc_error(uint8* frame){
 void rm_bcc2_error(uint8*frame, size_t frame_len){
 	if(bcc2_has_error){
 		// if statement in order to only debug certain frames
-		printf("ADD BCC2 ERROR: %02x", frame[frame_len - FRAME_OFFSET_BCC2]);
+		printf("REMOVE BCC2 ERROR: %02x", frame[frame_len - FRAME_OFFSET_BCC2]);
 		frame[frame_len-FRAME_OFFSET_BCC2] -= 1;
 		printf(" to %02x\n", frame[frame_len - FRAME_OFFSET_BCC2]);
 		bcc2_has_error = 0;
