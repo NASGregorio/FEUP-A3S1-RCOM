@@ -8,10 +8,25 @@
 #include "defs.h"
 
 
-// application layer
-// check sequence number / send REJ on bcc2 error
 
-//TODO check disc on transmitter
+// TODO
+// application layer
+
+// CHECKLIST
+// check disc on transmitter
+// multiple i frame bug - wrong sequence number maybe?
+
+/* OK
+	llopen
+		frame_set_request
+		frame_set_reply
+	llread X
+
+	llwrite
+*/
+
+
+
 
 time_t now; // Get the system time
 size_t time_len;
@@ -34,37 +49,6 @@ void string2ByteArray(char* input, uint8_t* output, size_t len)
 
 int main(int argc, char const *argv[])
 {
-
-	#ifdef DEBUG_MAIN_STUFFING
-	uint8_t len = 11;
-	uint8_t msg[] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
-	uint8_t BCC2 = msg[0];
-	for (size_t i = 1; i < len; i++)
-	{
-		BCC2 ^= msg[i];
-	}
-
-	size_t frame_len = FRAME_I_LEN + len;
-	uint8_t buf[128] = {FLAG, A_SENDER, C_I_0, A_SENDER ^ C_I_0, (uint8_t)'a', 1,1,126,1,1,126,1,1,125, (uint8_t)'z', BCC2, FLAG};
-
-	for (size_t i = 0; i < frame_len; i++)
-		DEBUG_PRINT(("%02x ", buf[i]));
-	DEBUG_PRINT(("\n"));
-
-	byte_stuffing(buf, &frame_len);
-
-	for (size_t i = 0; i < frame_len; i++)
-		DEBUG_PRINT(("%02x ", buf[i]));
-	DEBUG_PRINT(("\n"));
-
-	byte_destuffing(buf, &frame_len);
-
-	for (size_t i = 0; i < frame_len; i++)
-		DEBUG_PRINT(("%02x ", buf[i]));
-	DEBUG_PRINT(("\n"));
-	#endif
-
-
     if (argc < 3)
 	{
         printf("Usage: link_layer <port number 0|1|2> <mode T|R>\n");
@@ -111,7 +95,11 @@ int main(int argc, char const *argv[])
 		uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
 		#endif
 
-		llwrite(buf, sizeof(buf));
+		err = llwrite(buf, sizeof(buf));
+		err = llwrite(buf, sizeof(buf));
+		// if(err == EXIT_TIMEOUT)
+		// 	continue;
+
 		// now = time(0); // Get the system time
 		// char* time = asctime(gmtime(&now));
 		// time_len = strlen(time) - 1;

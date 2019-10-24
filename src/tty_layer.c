@@ -137,7 +137,7 @@ int write_msg(int fd, uint8_t msg[], unsigned len, int* bw)
 		return WRITE_FAIL;
 	}
 
-	#ifdef DEBUG_TTY_CALLS
+	#ifdef ENABLE_DEBUG
 	printf("Send %uB: ", *bw);
 	for (unsigned i = 0; i < *bw; i++)
 	    printf("%02x", msg[i]);
@@ -190,7 +190,7 @@ int read_msg(int fd, uint8_t* msg, int* br, unsigned maxLength, int (*func)(void
 		*br += res;
     }
 
-	#ifdef DEBUG_TTY_CALLS
+	#ifdef ENABLE_DEBUG
 	printf("Read %uB: ", *br);
 	for (unsigned i = 0; i < *br; i++)
 		printf("%02x", msg[i]);

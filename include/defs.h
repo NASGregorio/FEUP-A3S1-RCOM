@@ -17,17 +17,6 @@
 
 
 #define ENABLE_STUFF
-//#define DEBUG_BCC_ERROR
-#define DEBUG_BCC2_ERROR
-//#define DEBUG_MAIN_STUFFING
-
-
-#define DEBUG_TTY_CALLS
-#ifdef DEBUG_TTY_CALLS
-    #define DEBUG_PRINT(x) printf x
-#else
-    #define DEBUG_PRINT(x) do {} while (0)
-#endif
 
 #define TIMEOUT 3
 #define MAX_RETRIES 3

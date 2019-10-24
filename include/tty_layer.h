@@ -3,6 +3,18 @@
 
 #include <termios.h>
 
+///// --DEBUG-- /////
+#define ENABLE_DEBUG
+#ifdef ENABLE_DEBUG
+	#include "man_made_error.h"
+    #define DEBUG_PRINT(x) printf x
+	//#define ENABLE_BBC_ERROR
+	//#define ENABLE_BCC2_ERROR
+#else
+    #define DEBUG_PRINT(x) do {} while (0)
+#endif
+///// --DEBUG-- /////
+
 typedef struct termios TERMIOS;
 typedef unsigned char uint8_t;
 
