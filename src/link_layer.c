@@ -20,6 +20,7 @@ int bytes_read;
 
 uint8_t frame[MAX_FRAME_LEN];
 size_t frame_len = MAX_FRAME_LEN;
+uint8_t msg[255];
 
 uint8_t frame_SU[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
 uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
@@ -67,7 +68,7 @@ void byte_stuffing(uint8_t* frame_start, size_t *len)
 	size_t extra = 0;
 	size_t old_len = *len;
 
-	for (size_t i = FRAME_POS_D; i < old_len-FRAME_OFFSET_BCC2; i++)
+	for (size_t i = FRAME_POS_D; i <= old_len-FRAME_OFFSET_BCC2; i++)
 		if ( frame_start[i] == FLAG || frame_start[i] == ESCAPE )
 			extra++;
 
@@ -179,7 +180,6 @@ int frame_set_request()
 	while ( 1 )
 	{
 		// Wait for UA
-		uint8_t msg[255];
 		int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
 
 		// Exceeded timeout time, exit.
@@ -206,7 +206,7 @@ int frame_set_request()
 		else
 		{
 			DEBUG_PRINT(("Got UA\n"));
-			printf("Starting transfer...\n");
+			printf("Starting transfer...\n\n");
 			return OK;
 		}
 	}
@@ -239,7 +239,7 @@ void frame_set_reply()
 	printf("Incoming data...\n");
 }
 
-void frame_i_reply()
+void frame_i_reply(uint8_t* buffer)
 {
 	#ifdef ENABLE_DEBUG
 	size_t pre_stuffing_size = frame_len;
@@ -311,7 +311,10 @@ void frame_i_reply()
 			// TODO: Connection point to application layer
 			// Print frame data
 			for (size_t i = FRAME_POS_D; i < frame_len - FRAME_OFFSET_BCC2; i++)
+			{
 				printf("%c",(char)(frame[i]));
+				buffer[i-FRAME_POS_D] = frame[i];
+			}
 			printf("\n");
 			sequenceNumber = !sequenceNumber;
 		}
@@ -357,10 +360,8 @@ int frame_disc_reply()
 	write_msg(*llfd, frame_SU, FRAME_SU_LEN, &bytes_written);
 	DEBUG_PRINT(("Sent DISC\n"));
 
-
 	while(1)
 	{
-		uint8_t msg[255];
 		read_msg(*llfd, msg, &bytes_read, 255, NULL);
 
 		err = check_frame_bcc(msg, &bcc);
@@ -447,7 +448,6 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 		alarm(TIMEOUT);
 
 		// Wait for DISC
-		uint8_t msg[255];
 		int err;
 
 		while ( 1 )
@@ -573,7 +573,6 @@ int llwrite(uint8_t* buf, size_t len)
 	while( 1 )
 	{
 		// Wait for UA
-		uint8_t msg[255];
 		int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
 
 		// Exceeded timeout time, exit.
@@ -626,7 +625,7 @@ int llwrite(uint8_t* buf, size_t len)
 	return OK;
 }
 
-int llread()
+int llread(uint8_t* buffer)
 {
 	DEBUG_PRINT(("--------------------\n"));
 
@@ -644,7 +643,7 @@ int llread()
         break;
     case C_I_0:
     case C_I_1:
-        frame_i_reply();
+        frame_i_reply(buffer);
         break;
     case C_DISC:
 		return frame_disc_reply();
