@@ -25,6 +25,10 @@
 	llwrite
 */
 
+//7e0300036101017d5e01017d5e01017d5d7a667e
+//7e0300036101017d5e01017d5e01017d5d7a667e
+
+
 
 
 
@@ -89,13 +93,13 @@ int main(int argc, char const *argv[])
 		// write stuff
 		
 		//#ifdef ENABLE_STUFF
-		//uint8_t buf[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
+		uint8_t buf2[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
 		uint8_t buf[3] = {(uint8_t)'a',126,(uint8_t)'z'};
 		// #else
 		// uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
 		// #endif
 
-		err = llwrite(buf, sizeof(buf));
+		err = llwrite(buf2, sizeof(buf2));
 		err = llwrite(buf, sizeof(buf));
 		// if(err == EXIT_TIMEOUT)
 		// 	continue;
