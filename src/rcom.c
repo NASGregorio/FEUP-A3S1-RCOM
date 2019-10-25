@@ -13,21 +13,20 @@
 // application layer
 
 // CHECKLIST
-// check disc on transmitter
-// multiple i frame bug - wrong sequence number maybe?
+// check disc on receiver? timeout on disc retries maybe?
+// verificar llclose
+// verificar/adicionar comentarios
 
 /* OK
 	llopen
 		frame_set_request
 		frame_set_reply
-	llread X
-
+	llread
+		frame_i_reply
 	llwrite
+	llclose (verificar)
+		frame_disc_reply
 */
-
-//7e0300036101017d5e01017d5e01017d5d7a667e
-//7e0300036101017d5e01017d5e01017d5d7a667e
-
 
 
 

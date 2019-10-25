@@ -67,7 +67,7 @@ int set_port_attr(int fd, TERMIOS* oldtio, TERMIOS* newtio)
     }
 
 	// zero out new settings struct
-    bzero(newtio, sizeof(*newtio)); //TODO: memcpy instead of bzero
+    bzero(newtio, sizeof(*newtio));
 
 	// set new settings
     newtio->c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
