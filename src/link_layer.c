@@ -274,35 +274,38 @@ void frame_i_reply()
 	err = check_frame_bcc2(frame, frame_len, &bcc2);
 	if(err == BCC2_ERROR)
 	{
+		DEBUG_PRINT(("--------------------\n"));
+
 		DEBUG_PRINT(("Error I | BCC2: %02x\n", bcc2));
 		if(check_frame_control(frame, (sequenceNumber == 1 ? C_I_0 : C_I_1) == OK))
 		{
 			// SEND REJ
-			frame_RR_REJ[1] = A_SENDER;
-			frame_RR_REJ[2] = (sequenceNumber == 1 ? C_REJ_0 : C_REJ_1);
-			frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+			frame_RR_REJ[FRAME_POS_A] = A_SENDER;
+			frame_RR_REJ[FRAME_POS_C] = (sequenceNumber == 1 ? C_REJ_0 : C_REJ_1);
+			frame_RR_REJ[FRAME_POS_BCC] = frame_RR_REJ[FRAME_POS_A] ^ frame_RR_REJ[FRAME_POS_C];
 
 			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
-			DEBUG_PRINT(("Sent REJ: %u\n", sequenceNumber));
+			DEBUG_PRINT(("Sent REJ: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_I_1 ? 1 : 0), sequenceNumber));
+
 		}
 
 		else
 		{
-			frame_RR_REJ[1] = A_SENDER;
-			frame_RR_REJ[2] = (sequenceNumber == 1 ? C_RR_1 : C_RR_0);
-			frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+			frame_RR_REJ[FRAME_POS_A] = A_SENDER;
+			frame_RR_REJ[FRAME_POS_C] = (sequenceNumber == 1 ? C_RR_1 : C_RR_0);
+			frame_RR_REJ[FRAME_POS_BCC] = frame_RR_REJ[FRAME_POS_A] ^ frame_RR_REJ[FRAME_POS_C];
 
 
 			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
-			DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
 			sequenceNumber = !sequenceNumber;
+			DEBUG_PRINT(("Sent RR: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_I_1 ? 1 : 0), sequenceNumber));
 		}
 	}
 	else if(err == OK)
 	{
-		frame_RR_REJ[1] = A_SENDER;
-    	frame_RR_REJ[2] = (sequenceNumber ? C_RR_1 : C_RR_0);
-    	frame_RR_REJ[3] = frame_RR_REJ[1] ^ frame_RR_REJ[2];
+		frame_RR_REJ[FRAME_POS_A] = A_SENDER;
+    	frame_RR_REJ[FRAME_POS_C] = (sequenceNumber ? C_RR_1 : C_RR_0);
+    	frame_RR_REJ[FRAME_POS_BCC] = frame_RR_REJ[FRAME_POS_A] ^ frame_RR_REJ[FRAME_POS_C];
 
 		if(check_frame_control(frame, (sequenceNumber == 1 ? C_I_0 : C_I_1) == OK))
 		{
@@ -311,11 +314,13 @@ void frame_i_reply()
 			for (size_t i = FRAME_POS_D; i < frame_len - FRAME_OFFSET_BCC2; i++)
 				printf("%c",(char)(frame[i]));
 			printf("\n");
+			sequenceNumber = !sequenceNumber;
 		}
 
+		DEBUG_PRINT(("--------------------\n"));
+
 		write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
-		DEBUG_PRINT(("Sent RR: %u\n", sequenceNumber));
-		sequenceNumber = !sequenceNumber;
+		DEBUG_PRINT(("Sent RR: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_I_1 ? 1 : 0), sequenceNumber));
 	}
 }
 
@@ -558,7 +563,7 @@ int llwrite(uint8_t* buf, size_t len)
 	#endif
 
 	write_msg(*llfd, frame, frame_len, &bytes_written);
-	DEBUG_PRINT(("Sent I: %u\n", sequenceNumber));
+	DEBUG_PRINT(("Sent I: %u | Have: %u\n", (frame[FRAME_POS_C] == C_I_1 ? 1 : 0), sequenceNumber));
 
 	DEBUG_PRINT(("--------------------\n"));
 
@@ -596,7 +601,7 @@ int llwrite(uint8_t* buf, size_t len)
 		{
 			// Update sequence number
 			sequenceNumber = !sequenceNumber;
-			DEBUG_PRINT(("Got RR: %u\n", sequenceNumber));
+			DEBUG_PRINT(("Got RR: %u | Have: %u\n", (msg[FRAME_POS_C] == C_RR_1 ? 1 : 0), sequenceNumber));
 			return OK;
 		}
 		// No errors + REJ with same sequence number; resend without retry
@@ -606,7 +611,7 @@ int llwrite(uint8_t* buf, size_t len)
 			rm_bcc2_error(frame, frame_len);
 			#endif
 
-			DEBUG_PRINT(("Got REJ: %u\n", sequenceNumber));
+			DEBUG_PRINT(("Got REJ: %u | Have: %u\n", (msg[FRAME_POS_C] == C_REJ_1 ? 1 : 0), sequenceNumber));
 			write_msg(*llfd, frame, frame_len, &bytes_written);
 			alarm(TIMEOUT);
 		}
@@ -616,47 +621,6 @@ int llwrite(uint8_t* buf, size_t len)
 			DEBUG_PRINT(("Error RR | CTRL\n"));
 			timeout_handler();
 		}
-
-
-
-
-		// err = check_frame_bcc(msg, &bcc);
-		// if(err != OK)
-		// {
-		// 	DEBUG_PRINT(("Error RR | BCC CALC: %02x | BCC RCV: %02x\n", bcc, frame[FRAME_POS_BCC]));
-		// 	timeout_handler();
-		// 	continue;
-		// }
-
-		// err = check_frame_address(msg, A_SENDER);
-		// if(err != OK)
-		// {
-		// 	DEBUG_PRINT(("Error RR | ADDRESS\n"));
-		// 	timeout_handler();
-		// }
-
-		// if(check_frame_control(msg, (sequenceNumber == 0 ? C_RR_1 : C_RR_0)) == OK)
-		// {
-		// 	// Update sequence number
-		// 	sequenceNumber = !sequenceNumber;
-		// 	DEBUG_PRINT(("Got RR: %u\n", sequenceNumber));
-		// 	return OK;
-		// }
-		// else if(check_frame_control(msg, (sequenceNumber == 0 ? C_REJ_0 : C_REJ_1)) == OK)
-		// {
-		// 	#ifdef ENABLE_BCC2_ERROR
-		// 	rm_bcc2_error(frame, frame_len);
-		// 	#endif
-
-		// 	DEBUG_PRINT(("Got REJ: %u\n", sequenceNumber));
-		// 	write_msg(*llfd, frame, frame_len, &bytes_written);
-		// 	alarm(TIMEOUT);
-		// }
-		// else
-		// {
-		// 	DEBUG_PRINT(("Error RR | CTRL\n"));
-		// 	timeout_handler();
-		// }
 	}
 
 	return OK;
