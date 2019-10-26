@@ -12,11 +12,11 @@
 
 //uint8_t package[];
 
-int transferFile(int port, char *path){
+int transferFile(int port, char *path) {
 
     //The file we want to send is opened in read only mode
     FILE* file = fopen(path, "r");
-    if(file == NULL){
+    if(file == NULL) {
         printf("Failed to open file");
         return FOPEN_FAIL;
     }

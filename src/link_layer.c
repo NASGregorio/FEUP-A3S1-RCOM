@@ -20,7 +20,7 @@ int bytes_read;
 
 uint8_t frame[MAX_FRAME_LEN];
 size_t frame_len = MAX_FRAME_LEN;
-uint8_t msg[256];
+uint8_t msg[MAX_FRAME_REPLY_LEN];
 
 uint8_t frame_SU[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
 uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
@@ -248,7 +248,7 @@ void frame_i_reply(uint8_t* buffer)
 	byte_destuffing(frame, &frame_len);
 
 	#ifdef ENABLE_DEBUG
-	DEBUG_PRINT(("DESTUFFING PRE: %lu | POS: %lu\n", pre_stuffing_size, frame_len));
+	DEBUG_PRINT(("DESTUFFING PRE: %u | POS: %u\n", pre_stuffing_size, frame_len));
 	for (size_t i = 0; i < frame_len; i++)
 		DEBUG_PRINT(("%02x", frame[i]));
 	DEBUG_PRINT(("\n"));
@@ -324,7 +324,7 @@ void frame_i_reply(uint8_t* buffer)
 			memcpy(buffer, &frame[FRAME_POS_D], frame_len - FRAME_OFFSET_BCC2);
 
 			#ifndef ENABLE_DATA_PRINT
-			printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
+			printf("SIZE: %u\n", frame_len - FRAME_OFFSET_BCC2);
 			#endif
 			sequenceNumber = !sequenceNumber;
 		}
@@ -372,7 +372,7 @@ int frame_disc_reply()
 
 	while(1)
 	{
-		read_msg(*llfd, msg, &bytes_read, 255, NULL);
+		read_msg(*llfd, msg, &bytes_read, MAX_FRAME_REPLY_LEN, NULL);
 
 		err = check_frame_bcc(msg, &bcc);
 		if(err != OK)
@@ -408,22 +408,22 @@ int llopen(int port, COM_MODE mode, int* fd, TERMIOS* oldtio)
 {
 	// Only try to open port once
 	if( fcntl(*fd, F_GETFD) == -1 && errno == EBADF )
-	{
-		srand(time(NULL));
+		{
+			srand(time(NULL));
 
-		int err = open_port(port, fd);
-		if(err != OK)
-			return err;
+			int err = open_port(port, fd);
+			if(err != OK)
+				return err;
 
-		TERMIOS newtio;
-		err = set_port_attr(*fd, oldtio, &newtio);
-		if(err != OK)
-			return err;
+			TERMIOS newtio;
+			err = set_port_attr(*fd, oldtio, &newtio);
+			if(err != OK)
+				return err;
 
-		llfd = fd;
+			llfd = fd;
 
-		printf("Connection open\n");
-	}
+			printf("Connection open\n");
+		}
 
 	// 0 for TRANSMITTER | 1 for RECEIVER
 	sequenceNumber = (mode == RECEIVER);
@@ -443,9 +443,9 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 	if(mode == TRANSMITTER && timeout_exit == 0)
 	{
 		// prepare DISC frame
-		frame[1] = A_SENDER;
-		frame[2] = C_DISC;
-		frame[3] = (frame[1] ^ frame[2]);
+		frame[FRAME_POS_A] = A_SENDER;
+		frame[FRAME_POS_C] = C_DISC;
+		frame[FRAME_POS_BCC] = (frame[FRAME_POS_A] ^ frame[FRAME_POS_C]);
 		frame[4] = FLAG;
 		frame_len = FRAME_SU_LEN;
 
@@ -462,7 +462,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 
 		while ( 1 )
 		{
-			err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
+			err = read_msg(*llfd, msg, &bytes_read, MAX_FRAME_REPLY_LEN, return_on_timeout);
 
 			// Exceeded timeout time, exit.
 			if(err == EXIT_TIMEOUT)
@@ -471,6 +471,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 			// Disable timeout mechanism
 			alarm(0);	
 			
+			// Check frame's address
 			err = check_frame_address(msg, A_RECEIVER);
 			if(err != OK)
 			{
@@ -478,6 +479,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 				timeout_handler();
 				continue;
 			}
+			// Check frame's control
 			err = check_frame_control(msg, C_DISC);
 			if(err != OK)
 			{
@@ -498,9 +500,9 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 
 
 			// prepare UA frame
-			frame[1] = A_RECEIVER;
-			frame[2] = C_UA;
-			frame[3] = (frame[1] ^ frame[2]);
+			frame[FRAME_POS_A] = A_RECEIVER;
+			frame[FRAME_POS_C] = C_UA;
+			frame[FRAME_POS_BCC] = (frame[FRAME_POS_A] ^ frame[FRAME_POS_C]);
 			frame[4] = FLAG;
 			frame_len = FRAME_SU_LEN;
 
@@ -555,7 +557,7 @@ int llwrite(uint8_t* buf, size_t len)
 	}
 	printf("\n");
 	#else
-	printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
+	printf("SIZE: %u\n", frame_len - FRAME_OFFSET_BCC2);
 	#endif
 
 	///// --DEBUG-- /////
@@ -574,7 +576,7 @@ int llwrite(uint8_t* buf, size_t len)
 	byte_stuffing(frame, &frame_len);
 
 	#ifdef ENABLE_DEBUG
-	DEBUG_PRINT(("STUFFING PRE: %lu | POS: %lu\n", pre_stuffing_size, frame_len));
+	DEBUG_PRINT(("STUFFING PRE: %u | POS: %u\n", pre_stuffing_size, frame_len));
 	for (size_t i = 0; i < frame_len; i++)
 		DEBUG_PRINT(("%02x", frame[i]));
 	DEBUG_PRINT(("\n"));
@@ -591,7 +593,7 @@ int llwrite(uint8_t* buf, size_t len)
 	while( 1 )
 	{
 		// Wait for UA
-		int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
+		int err = read_msg(*llfd, msg, &bytes_read, MAX_FRAME_REPLY_LEN, return_on_timeout);
 
 		// Exceeded timeout time, exit.
 		if(err == EXIT_TIMEOUT)

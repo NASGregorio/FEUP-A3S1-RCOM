@@ -53,25 +53,11 @@ size_t file_current_frame;
 int file_op_ret;
 int count;
 size_t buffer_size;
+int port_fd = -1;
 
 
 int main(int argc, char const *argv[])
 {
-	// uint8_t buf[64] = {FLAG, A_SENDER, C_I_0, A_SENDER ^ C_I_0, 0x17, 0x6A, (0x17 ^ 0x6A), FLAG};
-	// size_t len = 8; 
-
-	// for (size_t i = 0; i < len; i++)
-	// 	printf("%02x ", buf[i]);
-	// printf("\n");
-	// byte_stuffing(buf, &len);
-	// for (size_t i = 0; i < len; i++)
-	// 	printf("%02x ", buf[i]);
-	// printf("\n");
-	// byte_destuffing(buf, &len);
-	// for (size_t i = 0; i < len; i++)
-	// 	printf("%02x ", buf[i]);
-	// printf("\n");
-	
 	
     if (argc < 3)
 	{
@@ -79,7 +65,6 @@ int main(int argc, char const *argv[])
         return BAD_ARGS;
     }
 
-    int port_fd;
 	TERMIOS oldtio;
 
 	int portNumber = strtol(argv[1],  NULL, 10);
@@ -181,38 +166,14 @@ int main(int argc, char const *argv[])
 				}
 			}
 
-			// for (size_t i = 0; i < 9; i++)
-			// 	printf("%02x ", buffer[i]);
-			// printf("\n");
-			// for (size_t i = 0; i < 9; i++)
-			// 	printf("%c", (char)buffer[i]);
-			// printf("\n");
-
 			err = llwrite(buffer, buffer_size);
 			if(err == EXIT_TIMEOUT)
 				break;
 
 			file_current_frame++;
 			
-
-			// err = llwrite(buf2, sizeof(buf2));
-
 		}
-		
-		
-		// //#ifdef ENABLE_STUFF
-		// uint8_t buf2[11] = {(uint8_t)'a',1,1,126,1,1,126,1,1,125,(uint8_t)'z'};
-		// uint8_t buf[3] = {(uint8_t)'a',126,(uint8_t)'z'};
-		// // #else
-		// // uint8_t buf[9] = {2,0,0,9,0,0,3,0,3};
-		// // #endif
-
-		// err = llwrite(buf2, sizeof(buf2));
-		// err = llwrite(buf, sizeof(buf));
-		// if(err == EXIT_TIMEOUT)
-		// 	continue;
 	}
-
 
 	fclose(file);
 

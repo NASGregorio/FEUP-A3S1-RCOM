@@ -18,6 +18,7 @@
 #define MAX_RETRIES 3
 
 #define MAX_FRAME_LEN 6+65000
+#define MAX_FRAME_REPLY_LEN 16
 
 #define OK 0
 #define BAD_ARGS 1
