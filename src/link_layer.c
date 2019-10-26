@@ -236,7 +236,7 @@ void frame_set_reply()
 	write_msg(*llfd, frame_SU, FRAME_SU_LEN, &bytes_written);
 	DEBUG_PRINT(("Sent UA\n"));
 
-	printf("Incoming data...\n");
+	printf("Incoming data...\n\n");
 }
 
 void frame_i_reply(uint8_t* buffer)
@@ -312,7 +312,9 @@ void frame_i_reply(uint8_t* buffer)
 			// Print frame data
 			for (size_t i = FRAME_POS_D; i < frame_len - FRAME_OFFSET_BCC2; i++)
 			{
-				printf("%c",(char)(frame[i]));
+				printf("%02x ",(frame[i]));
+				if( (i - FRAME_POS_D+1) % 16 == 0)
+					printf("\n");
 				buffer[i-FRAME_POS_D] = frame[i];
 			}
 			printf("\n");
@@ -504,7 +506,7 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 
 	if(timeout_exit == 0)
 	{
-		printf("Transfer complete\n");
+		printf("\nTransfer complete\n");
 		DEBUG_PRINT(("--------------------\n"));
 	}
 
@@ -536,8 +538,12 @@ int llwrite(uint8_t* buf, size_t len)
 	frame[frame_len - FRAME_OFFSET_BCC2] = BCC2_generator(buf, len);
 	frame[frame_len - 1] = FLAG;
 
-	for (size_t i = 4; i < frame_len-2; i++)
-		printf("%c",(char)(frame[i]));
+	for (size_t i = FRAME_POS_D; i < frame_len-FRAME_OFFSET_BCC2; i++)
+	{
+		printf("%02x ",(frame[i]));
+		if( (i - FRAME_POS_D+1) % 16 == 0)
+			printf("\n");
+	}
 	printf("\n");
 
 	///// --DEBUG-- /////
@@ -625,7 +631,7 @@ int llwrite(uint8_t* buf, size_t len)
 	return OK;
 }
 
-int llread(uint8_t* buffer)
+int llread(uint8_t* buffer, size_t* len)
 {
 	DEBUG_PRINT(("--------------------\n"));
 
@@ -636,14 +642,16 @@ int llread(uint8_t* buffer)
 
 	frame_len = bytes_read;
 
+
     switch (frame[FRAME_POS_C])
     {
     case C_SET:
         frame_set_reply();
-        break;
+        return SET_RET;
     case C_I_0:
     case C_I_1:
         frame_i_reply(buffer);
+		*len = frame_len - FRAME_I_LEN;
         break;
     case C_DISC:
 		return frame_disc_reply();

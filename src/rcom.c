@@ -13,7 +13,6 @@
 // application layer
 
 // CHECKLIST
-// check disc on receiver? timeout on disc retries maybe?
 // verificar llclose
 // verificar/adicionar comentarios
 
@@ -53,6 +52,7 @@ uint8_t buffer[BUF_SIZE];
 size_t file_current_frame;
 int file_op_ret;
 int count;
+size_t buffer_size;
 
 
 int main(int argc, char const *argv[])
@@ -120,7 +120,7 @@ int main(int argc, char const *argv[])
 	}
 	else
 	{
-		file = fopen("test_transfer_new", "w");
+		file = fopen("test_transfer_new.gif", "w");
 	}
 	
 
@@ -139,23 +139,22 @@ int main(int argc, char const *argv[])
 		count = 0;
 		while( 1 ) 
 		{
-			err = llread(buffer);
+			err = llread(buffer, &buffer_size);
 			if(err == DISC_CONN)
 				break;
-				
-			file_op_ret = fwrite(buffer, BUF_SIZE, 1, file);
-			if(file_op_ret != 1)
+
+			if(err == SET_RET)
+				continue;
+
+			file_op_ret = fwrite(buffer, buffer_size, 1, file);
+			if(file_op_ret != 1 && ferror(file))
 			{
 				printf("Read: %d\n", file_op_ret);
-				if (ferror(file))
-				{
-					printf("Error while reading file");
-					continue;
-				}
+				printf("Error while reading file");
+				continue;
 			}
 			count++;
 		}
-		printf("%d\n", count);
 	}
 	
 	// write loop
@@ -165,12 +164,18 @@ int main(int argc, char const *argv[])
 		file_current_frame = 0;
 		while (file_current_frame < file_split_frames)
 		{
-			file_op_ret=fread(buffer, BUF_SIZE, 1, file);
+
+			if( (file_size / BUF_SIZE) == file_current_frame)
+				buffer_size = file_size % BUF_SIZE;
+			else
+				buffer_size = BUF_SIZE;
+
+			file_op_ret=fread(buffer, buffer_size, 1, file);
 			if(file_op_ret != 1 || feof(file) > 0)
 			{
-				printf("Read: %d\n", file_op_ret);
 				if (ferror(file))
 				{
+					printf("Read: %d\n", file_op_ret);
 					printf("Error while reading file");
 					continue;
 				}
@@ -183,7 +188,7 @@ int main(int argc, char const *argv[])
 			// 	printf("%c", (char)buffer[i]);
 			// printf("\n");
 
-			err = llwrite(buffer, BUF_SIZE);
+			err = llwrite(buffer, buffer_size);
 			if(err == EXIT_TIMEOUT)
 				break;
 

@@ -36,6 +36,7 @@
 #define DUP_FRAME 14
 #define FOPEN_FAIL 15
 #define FCLOSE_FAIL 16
+#define SET_RET 17
 
 #define BYTE_XOR 0x20
 #define ESCAPE 0x7d
