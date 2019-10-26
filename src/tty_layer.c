@@ -9,11 +9,10 @@
 
 int open_port(int port, int* fd)
 {
-	if(port < 0 || port > 2)
-	{
-		printf("Invalid port number: %d", port);
-      	return BAD_ARGS;
-	}
+	// if(port < 0 || port > 2)
+	// {
+    //   	return BAD_ARGS;
+	// }
 
 	char* portName;
 
@@ -29,7 +28,8 @@ int open_port(int port, int* fd)
 		portName = TTYS2;
 		break;
 	default:
-		break;
+		printf("Invalid port number: %d", port);
+		return BAD_ARGS;
 	}
 
 	//Opening as R/W and not as controlling tty to not get killed if linenoise sends CTRL-C.

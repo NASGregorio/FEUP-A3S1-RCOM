@@ -20,7 +20,7 @@ int bytes_read;
 
 uint8_t frame[MAX_FRAME_LEN];
 size_t frame_len = MAX_FRAME_LEN;
-uint8_t msg[255];
+uint8_t msg[256];
 
 uint8_t frame_SU[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
 uint8_t frame_RR_REJ[FRAME_SU_LEN] = { FLAG, -1, -1, -1, FLAG };
@@ -180,7 +180,7 @@ int frame_set_request()
 	while ( 1 )
 	{
 		// Wait for UA
-		int err = read_msg(*llfd, msg, &bytes_read, 255, return_on_timeout);
+		int err = read_msg(*llfd, msg, &bytes_read, MAX_FRAME_LEN, return_on_timeout);
 
 		// Exceeded timeout time, exit.
 		if(err == EXIT_TIMEOUT)
@@ -308,16 +308,24 @@ void frame_i_reply(uint8_t* buffer)
 
 		if(check_frame_control(frame, (sequenceNumber == 1 ? C_I_0 : C_I_1) == OK))
 		{
-			// TODO: Connection point to application layer
-			// Print frame data
+			// Extract frame data
+			#ifdef ENABLE_DATA_PRINT
 			for (size_t i = FRAME_POS_D; i < frame_len - FRAME_OFFSET_BCC2; i++)
 			{
 				printf("%02x ",(frame[i]));
 				if( (i - FRAME_POS_D+1) % 16 == 0)
 					printf("\n");
-				buffer[i-FRAME_POS_D] = frame[i];
+				printf("\n");
+				
+				//buffer[i-FRAME_POS_D] = frame[i];
 			}
-			printf("\n");
+			#endif
+
+			memcpy(buffer, &frame[FRAME_POS_D], frame_len - FRAME_OFFSET_BCC2);
+
+			#ifndef ENABLE_DATA_PRINT
+			printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
+			#endif
 			sequenceNumber = !sequenceNumber;
 		}
 		else
@@ -538,6 +546,7 @@ int llwrite(uint8_t* buf, size_t len)
 	frame[frame_len - FRAME_OFFSET_BCC2] = BCC2_generator(buf, len);
 	frame[frame_len - 1] = FLAG;
 
+	#ifdef ENABLE_DATA_PRINT
 	for (size_t i = FRAME_POS_D; i < frame_len-FRAME_OFFSET_BCC2; i++)
 	{
 		printf("%02x ",(frame[i]));
@@ -545,6 +554,9 @@ int llwrite(uint8_t* buf, size_t len)
 			printf("\n");
 	}
 	printf("\n");
+	#else
+	printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
+	#endif
 
 	///// --DEBUG-- /////
 	#ifdef ENABLE_BBC_ERROR
@@ -637,7 +649,7 @@ int llread(uint8_t* buffer, size_t* len)
 
     // Wait for frame
 	int err;
-	if( (err = read_msg(*llfd, frame, &bytes_read, 255, NULL)) != OK)
+	if( (err = read_msg(*llfd, frame, &bytes_read, MAX_FRAME_LEN, NULL)) != OK)
         return err;
 
 	frame_len = bytes_read;

@@ -42,7 +42,7 @@ void string2ByteArray(char* input, uint8_t* output, size_t len)
     }
 }
 
-#define BUF_SIZE 64
+#define BUF_SIZE 64000
 
 const char* file_path;
 FILE* file;

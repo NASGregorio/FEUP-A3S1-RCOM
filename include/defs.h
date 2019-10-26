@@ -17,7 +17,7 @@
 #define TIMEOUT 3
 #define MAX_RETRIES 3
 
-#define MAX_FRAME_LEN 1024
+#define MAX_FRAME_LEN 6+65000
 
 #define OK 0
 #define BAD_ARGS 1
