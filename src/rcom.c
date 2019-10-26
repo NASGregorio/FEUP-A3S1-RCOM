@@ -166,6 +166,8 @@ int main(int argc, char const *argv[])
 				}
 			}
 
+			// preparar pacote em buffer
+
 			err = llwrite(buffer, buffer_size);
 			if(err == EXIT_TIMEOUT)
 				break;

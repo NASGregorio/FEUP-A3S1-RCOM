@@ -54,6 +54,17 @@
 #define C_REJ_1 (C_REJ_0 | 0x80)
 #define C_I_1 (C_I_0 | 0x40)
 
+#define CP_DATA 0x01 
+#define CP_START 0x02
+#define CP_END 0x03
+
+#define T_FILESIZE 0x00
+#define T_FILENAME 0x01
+
+#define L_CHAR 0x01
+#define L_INT 0x04
+#define L_LONG 0x08
+
 #define FALSE 0
 #define TRUE 1
 
