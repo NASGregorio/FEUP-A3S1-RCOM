@@ -3,11 +3,17 @@
 
 #include "link_layer.h"
 
+void string2ByteArray(char* input, uint8_t* output, size_t len);
+
+int main(int argc, char const *argv[]);
+
 int transferFile(int port, char* path);
 int receiveFile(int port);
 
-uint8_t* controlPackageProc(int start, long fileSize, uint8_t *fileName, int fileNameSize);
+int fileSizeBytes(uint8_t* sizeBytes);
 
-uint8_t* dataPackageProc(uint8_t* msg, unsigned long fileSize, __uint32_t* packetSize);
+int control_package_protocol(int start, uint8_t *fileName, uint8_t fileNameSize, uint8_t sizeBytes, uint8_t* package);
+
+int dataPackageProc(uint8_t* msg, __uint32_t* packetSize, uint8_t* package);
 
 #endif
