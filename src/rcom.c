@@ -32,17 +32,17 @@ void string2ByteArray(char* input, uint8_t* output, size_t len)
 {
     int loop;
     int i;
-    
+
     loop = 0;
     i = 0;
-    
+
     while(loop < len)
     {
         output[i++] = input[loop++];
     }
 }
 
-#define BUF_SIZE 64000
+#define BUF_SIZE 256
 
 const char* file_path;
 FILE* file;
@@ -58,7 +58,7 @@ int port_fd = -1;
 
 int main(int argc, char const *argv[])
 {
-	
+
     if (argc < 3)
 	{
         printf("Usage: link_layer <port number 0|1|2> <mode T|R> <file path - required in mode T>\n");
@@ -105,9 +105,10 @@ int main(int argc, char const *argv[])
 	}
 	else
 	{
-		file = fopen("test_transfer_new.gif", "w");
+		file = fopen("test_transfer_new", "w");
+		printf("asd\n");
 	}
-	
+
 
 
 	// open connection
@@ -122,26 +123,28 @@ int main(int argc, char const *argv[])
 	if(mode == RECEIVER)
 	{
 		count = 0;
-		while( 1 ) 
+		while( 1 )
 		{
 			err = llread(buffer, &buffer_size);
 			if(err == DISC_CONN)
 				break;
 
-			if(err == SET_RET)
-				continue;
-
-			file_op_ret = fwrite(buffer, buffer_size, 1, file);
-			if(file_op_ret != 1 && ferror(file))
+			if(err == OK)
 			{
-				printf("Read: %d\n", file_op_ret);
-				printf("Error while reading file");
-				continue;
+				file_op_ret = fwrite(buffer, buffer_size, 1, file);
+				printf("A %lu\n", buffer_size);
+				if(file_op_ret != 1 && ferror(file))
+				{
+					printf("Read: %d\n", file_op_ret);
+					printf("Error while reading file");
+					continue;
+				}
+				count++;
+
 			}
-			count++;
 		}
 	}
-	
+
 	// write loop
 	else if (mode == TRANSMITTER)
 	{
@@ -167,13 +170,13 @@ int main(int argc, char const *argv[])
 			}
 
 			// preparar pacote em buffer
-
+      printf("%lu\n", buffer_size);
 			err = llwrite(buffer, buffer_size);
 			if(err == EXIT_TIMEOUT)
 				break;
 
 			file_current_frame++;
-			
+
 		}
 	}
 

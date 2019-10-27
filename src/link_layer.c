@@ -120,7 +120,7 @@ void byte_destuffing(uint8_t* frame_start, size_t* len)
 		frame_start[i+FRAME_POS_D] = temp[i];
 	}
 	frame_start[*len-1] = FLAG;
-	
+
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +239,7 @@ void frame_set_reply()
 	printf("Incoming data...\n\n");
 }
 
-void frame_i_reply(uint8_t* buffer)
+int frame_i_reply(uint8_t* buffer)
 {
 	#ifdef ENABLE_DEBUG
 	size_t pre_stuffing_size = frame_len;
@@ -248,7 +248,7 @@ void frame_i_reply(uint8_t* buffer)
 	byte_destuffing(frame, &frame_len);
 
 	#ifdef ENABLE_DEBUG
-	DEBUG_PRINT(("DESTUFFING PRE: %u | POS: %u\n", pre_stuffing_size, frame_len));
+	DEBUG_PRINT(("DESTUFFING PRE: %lu | POS: %lu\n", pre_stuffing_size, frame_len));
 	for (size_t i = 0; i < frame_len; i++)
 		DEBUG_PRINT(("%02x", frame[i]));
 	DEBUG_PRINT(("\n"));
@@ -259,13 +259,13 @@ void frame_i_reply(uint8_t* buffer)
 	if(err != OK)
 	{
 		DEBUG_PRINT(("Error I | BCC CALC: %02x | BCC RCV: %02x\n", bcc, frame[FRAME_POS_BCC]));
-		return;
+		return BCC_ERROR;
 	}
 	err = check_frame_address(frame, A_SENDER);
 	if(err != OK)
 	{
 		DEBUG_PRINT(("Error | ADDRESS\n"));
-		return;
+		return ADR_ERROR;
 	}
 
 	DEBUG_PRINT(("Got I: %u | Have: %u\n", (frame[FRAME_POS_C] == C_I_1 ? 1 : 0), sequenceNumber));
@@ -286,6 +286,7 @@ void frame_i_reply(uint8_t* buffer)
 
 			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
 			DEBUG_PRINT(("Sent REJ: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_REJ_1 ? 1 : 0), sequenceNumber));
+			return BCC2_ERROR;
 		}
 
 		else
@@ -298,6 +299,7 @@ void frame_i_reply(uint8_t* buffer)
 			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
 			//sequenceNumber = !sequenceNumber;	//CHECK - possible problem - discard frame if bcc2 + wrong sequence number
 			DEBUG_PRINT(("Sent RR: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_RR_1 ? 1 : 0), sequenceNumber));
+			return BCC2_ERROR;
 		}
 	}
 	else if(err == OK)
@@ -315,28 +317,35 @@ void frame_i_reply(uint8_t* buffer)
 				printf("%02x ",(frame[i]));
 				if( (i - FRAME_POS_D+1) % 16 == 0)
 					printf("\n");
-				printf("\n");
-				
+
 				//buffer[i-FRAME_POS_D] = frame[i];
 			}
+			printf("\n");
 			#endif
 
 			memcpy(buffer, &frame[FRAME_POS_D], frame_len - FRAME_OFFSET_BCC2);
 
 			#ifndef ENABLE_DATA_PRINT
-			printf("SIZE: %u\n", frame_len - FRAME_OFFSET_BCC2);
+			printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
 			#endif
 			sequenceNumber = !sequenceNumber;
+			DEBUG_PRINT(("--------------------\n"));
+			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
+			DEBUG_PRINT(("Sent RR: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_RR_1 ? 1 : 0), sequenceNumber));
+			return OK;
 		}
 		else
 		{
 			frame_RR_REJ[FRAME_POS_C] = (sequenceNumber == 1 ? C_RR_0 : C_RR_1);
+			frame_RR_REJ[FRAME_POS_BCC] = frame_RR_REJ[FRAME_POS_A] ^ frame_RR_REJ[FRAME_POS_C];
+			DEBUG_PRINT(("--------------------\n"));
+			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
+			DEBUG_PRINT(("Sent RR: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_RR_1 ? 1 : 0), sequenceNumber));
+			return DUP_FRAME;
 		}
-
-		DEBUG_PRINT(("--------------------\n"));
-		write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
-		DEBUG_PRINT(("Sent RR: %u | Have: %u\n", (frame_RR_REJ[FRAME_POS_C] == C_RR_1 ? 1 : 0), sequenceNumber));
 	}
+	else
+		return CTR_ERROR;
 }
 
 int frame_disc_reply()
@@ -380,7 +389,7 @@ int frame_disc_reply()
 			DEBUG_PRINT(("Error DISC | BCC: %02x\n", bcc));
 			return err;
 		}
-		
+
 
 		// If TRANSMITTER DISC - repeat RECEIVER DISC
 		if(check_frame_address(msg, A_SENDER) == OK && check_frame_control(msg, C_DISC) == OK)
@@ -469,8 +478,8 @@ int llclose(TERMIOS* oldtio, COM_MODE mode)
 				return err;
 
 			// Disable timeout mechanism
-			alarm(0);	
-			
+			alarm(0);
+
 			// Check frame's address
 			err = check_frame_address(msg, A_RECEIVER);
 			if(err != OK)
@@ -557,7 +566,7 @@ int llwrite(uint8_t* buf, size_t len)
 	}
 	printf("\n");
 	#else
-	printf("SIZE: %u\n", frame_len - FRAME_OFFSET_BCC2);
+	printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
 	#endif
 
 	///// --DEBUG-- /////
@@ -567,7 +576,7 @@ int llwrite(uint8_t* buf, size_t len)
 	#ifdef ENABLE_BCC2_ERROR
 	add_bcc2_error(frame, frame_len);
 	#endif
-	///// --DEBUG-- /////	
+	///// --DEBUG-- /////
 
 	#ifdef ENABLE_DEBUG
 	size_t pre_stuffing_size = frame_len;
@@ -576,7 +585,7 @@ int llwrite(uint8_t* buf, size_t len)
 	byte_stuffing(frame, &frame_len);
 
 	#ifdef ENABLE_DEBUG
-	DEBUG_PRINT(("STUFFING PRE: %u | POS: %u\n", pre_stuffing_size, frame_len));
+	DEBUG_PRINT(("STUFFING PRE: %lu | POS: %lu\n", pre_stuffing_size, frame_len));
 	for (size_t i = 0; i < frame_len; i++)
 		DEBUG_PRINT(("%02x", frame[i]));
 	DEBUG_PRINT(("\n"));
@@ -607,7 +616,7 @@ int llwrite(uint8_t* buf, size_t len)
 			DEBUG_PRINT(("Error SET | ADDRESS\n"));
 		else if((err = check_frame_bcc(frame, &bcc)) != OK)
 			DEBUG_PRINT(("Error UA | BCC CALC: %02x | BCC RCV: %02x\n", bcc, frame[FRAME_POS_BCC]));
-		
+
 		// Errors in bcc or address; Ignore frame; resend with retry
 		if(err != OK)
 		{
@@ -664,9 +673,9 @@ int llread(uint8_t* buffer, size_t* len)
         return SET_RET;
     case C_I_0:
     case C_I_1:
-        frame_i_reply(buffer);
+        err =frame_i_reply(buffer);
 		*len = frame_len - FRAME_I_LEN;
-        break;
+		return err;
     case C_DISC:
 		return frame_disc_reply();
     default:
