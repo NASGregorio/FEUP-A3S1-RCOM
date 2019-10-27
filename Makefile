@@ -21,3 +21,9 @@ clean:
 .PHONY: cleandep
 cleandep:
 	rm -f $(dep)
+
+.PHONY: reset
+reset: clean cleandep
+
+.PHONY: fresh
+fresh: reset $(prog)

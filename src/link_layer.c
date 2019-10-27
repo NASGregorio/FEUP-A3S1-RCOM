@@ -325,9 +325,6 @@ int frame_i_reply(uint8_t* buffer)
 
 			memcpy(buffer, &frame[FRAME_POS_D], frame_len - FRAME_OFFSET_BCC2);
 
-			#ifndef ENABLE_DATA_PRINT
-			printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
-			#endif
 			sequenceNumber = !sequenceNumber;
 			DEBUG_PRINT(("--------------------\n"));
 			write_msg(*llfd, frame_RR_REJ, FRAME_SU_LEN, &bytes_written);
@@ -565,8 +562,6 @@ int llwrite(uint8_t* buf, size_t len)
 			printf("\n");
 	}
 	printf("\n");
-	#else
-	printf("SIZE: %lu\n", frame_len - FRAME_OFFSET_BCC2);
 	#endif
 
 	///// --DEBUG-- /////
