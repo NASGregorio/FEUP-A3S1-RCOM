@@ -5,7 +5,7 @@
 
 ///// --DEBUG-- /////
 //#define ENABLE_DATA_PRINT
-//#define ENABLE_DEBUG
+#define ENABLE_DEBUG
 #ifdef ENABLE_DEBUG
 	#include "man_made_error.h"
     #define DEBUG_PRINT(x) printf x

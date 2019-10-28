@@ -67,7 +67,9 @@ void build_control_packet(uint8_t** packet, size_t* packet_len, char** filename,
 
 	// Get filename length
 	size_t fn_len = strlen(*filename);
-	
+
+	printf("file len: %ld \n",fn_len);
+
 	// Get length, in bytes, of hexadecimal file size representation
 	uint8_t fs_len = calculate_size_length(filesize);
 	
@@ -122,10 +124,14 @@ void unpack_control(long* filesize, char** filename, uint8_t* packet)
 
 	len = packet[marker++];
 
-	*filename = malloc(len);
+	printf("file len: %d\n",len);
+
+
+	*filename = malloc(len+1);
 
 	for (size_t i = 0; i < len; i++)
 		(*filename)[i] = packet[marker++];
+	(*filename)[len] = '\0';
 }
 
 int main(int argc, char *argv[])
@@ -234,7 +240,7 @@ int main(int argc, char *argv[])
 				}
 				else if(buffer_rcvr[0] == TLV_END)
 				{
-					unpack_control(&file_size, &file_name, buffer_rcvr);
+					//unpack_control(&file_size, &file_name, buffer_rcvr);
 					printf("Got end control packet > %s | %luB\n", file_name, file_size);
 				}
 
@@ -296,6 +302,18 @@ int main(int argc, char *argv[])
 	}
 
 	fclose(file);
+
+	if(buffer_sender)
+		free(buffer_sender);
+
+	if(buffer_rcvr)
+		free(buffer_rcvr);
+
+	if(ctrl_packet)
+		free(ctrl_packet);
+
+	if(file_name)
+		free(file_name);
 
 	// close connection
 	err = llclose(&oldtio, mode);

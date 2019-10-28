@@ -14,6 +14,7 @@ int* llfd;
 unsigned retries_count = 0;
 unsigned timeout_exit = 0;
 unsigned sequenceNumber = 0;
+unsigned alarmFlag = 0;
 
 int bytes_written;
 int bytes_read;
@@ -127,6 +128,8 @@ void byte_destuffing(uint8_t* frame_start, size_t* len)
 
 void timeout_handler()
 {
+	alarmFlag = 1;
+
 	if(retries_count >= MAX_RETRIES)
 	{
 		timeout_exit = 1;
@@ -603,24 +606,20 @@ int llwrite(uint8_t* buf, size_t len)
 		if(err == EXIT_TIMEOUT)
 			return err;
 
-		// Disable timeout mechanism
-		alarm(0);
-
 		uint8_t bcc;
-		if((err = check_frame_address(frame, A_SENDER)) != OK)
+		if((err = check_frame_address(msg, A_SENDER)) != OK)
 			DEBUG_PRINT(("Error SET | ADDRESS\n"));
-		else if((err = check_frame_bcc(frame, &bcc)) != OK)
-			DEBUG_PRINT(("Error UA | BCC CALC: %02x | BCC RCV: %02x\n", bcc, frame[FRAME_POS_BCC]));
+		else if((err = check_frame_bcc(msg, &bcc)) != OK)
+			DEBUG_PRINT(("Error UA | BCC CALC: %02x | BCC RCV: %02x\n", bcc, msg[FRAME_POS_BCC]));
 
 		// Errors in bcc or address; Ignore frame; resend with retry
 		if(err != OK)
 		{
-			timeout_handler();
 			continue;
 		}
 
 		// No errors + RR with expected sequence number; proceed to next frame
-		if(check_frame_control(msg, (sequenceNumber == 0 ? C_RR_1 : C_RR_0)) == OK)
+		else if(check_frame_control(msg, (sequenceNumber == 0 ? C_RR_1 : C_RR_0)) == OK)
 		{
 			// Update sequence number
 			sequenceNumber = !sequenceNumber;
@@ -642,7 +641,7 @@ int llwrite(uint8_t* buf, size_t len)
 		else
 		{
 			DEBUG_PRINT(("Error RR | CTRL\n"));
-			timeout_handler();
+			continue;
 		}
 	}
 
