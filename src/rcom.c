@@ -8,43 +8,20 @@
 #include "defs.h"
 
 
-
-// TODO
-// application layer
-
-// CHECKLIST
-// verificar llclose
-// verificar/adicionar comentarios
-
-/* OK
-	llopen
-		frame_set_request
-		frame_set_reply
-	llread
-		frame_i_reply
-	llwrite
-	llclose (verificar)
-		frame_disc_reply
-*/
-
-
-#define BUF_SIZE 256
-
 char* file_path;
 char* file_name;
 FILE* file;
+
 long file_size;
 long file_split_frames;
-size_t buffer_size2;
+size_t file_current_frame;
+
 uint8_t* buffer_sender;
 uint8_t* buffer_rcvr;
-size_t file_current_frame;
-int file_op_ret;
-int count;
-size_t buffer_size;
-int port_fd = -1;
 
-//uint8_t* ctrl_packet;
+size_t buffer_size;
+
+int file_op_ret;
 
 
 uint8_t calculate_size_length(long size)
@@ -67,8 +44,6 @@ void build_control_packet(uint8_t** packet, size_t* packet_len, char** filename,
 
 	// Get filename length
 	size_t fn_len = strlen(*filename);
-
-	printf("file len: %ld \n",fn_len);
 
 	// Get length, in bytes, of hexadecimal file size representation
 	uint8_t fs_len = calculate_size_length(filesize);
@@ -123,9 +98,6 @@ void unpack_control(long* filesize, char** filename, uint8_t* packet)
 	marker++;
 
 	len = packet[marker++];
-
-	printf("file len: %d\n",len);
-
 
 	*filename = malloc(len+1);
 
@@ -182,31 +154,31 @@ int main(int argc, char *argv[])
 		file_size = ftell(file);
 		fseek(file, 0, SEEK_SET);
 
-		buffer_size2 = strtol(argv[4],  NULL, 10);
-		buffer_sender = malloc(buffer_size2);
+		buffer_size = strtol(argv[4],  NULL, 10);
+		buffer_sender = malloc(buffer_size);
 
-		file_split_frames = file_size / buffer_size2;
-		if(file_size % buffer_size2 != 0)
+		file_split_frames = file_size / buffer_size;
+		if(file_size % buffer_size != 0)
 			file_split_frames++;
 
 	}
 
-
-
-	// open connection
-	int err = llopen(portNumber, mode, &port_fd, &oldtio);
-	if(err != OK)
-	{
-		printf("Failed to establish connection\n");
-		return err;
-	}
+	int err;
 
 	// read loop
 	if(mode == RECEIVER)
 	{
+		// open connection
+		err = llopen(portNumber, mode, &oldtio, strtol(argv[3], NULL, 10), strtol(argv[4], NULL, 10), strtol(argv[5], NULL, 10));
+		if(err != OK)
+		{
+			printf("Failed to establish connection\n");
+			return err;
+		}
+
+
 		buffer_rcvr = malloc(256);
 
-		count = 0;
 		while( 1 )
 		{
 			err = llread(buffer_rcvr, &buffer_size);
@@ -235,17 +207,12 @@ int main(int argc, char *argv[])
 						printf("Error while reading file");
 						continue;
 					}
-					count++;
-					printf("Got data packet > N-%03u | %luB\n", buffer_rcvr[1], (size_t)(buffer_rcvr[2]*256+buffer_rcvr[3]));
+					printf("Got data packet > N-%03u | %luB\n", buffer_rcvr[1]+1, (size_t)(buffer_rcvr[2]*256+buffer_rcvr[3]));
 				}
 				else if(buffer_rcvr[0] == TLV_END)
 				{
-					//unpack_control(&file_size, &file_name, buffer_rcvr);
 					printf("Got end control packet > %s | %luB\n", file_name, file_size);
 				}
-
-
-
 			}
 		}
 	}
@@ -253,6 +220,15 @@ int main(int argc, char *argv[])
 	// write loop
 	else if (mode == TRANSMITTER)
 	{
+		// open connection
+		err = llopen(portNumber, mode, &oldtio, 0, 0, 0);
+		if(err != OK)
+		{
+			printf("Failed to establish connection\n");
+			return err;
+		}
+
+
 		// Send control packet
 		build_control_packet(&ctrl_packet, &ctrl_packet_len, &file_path, file_size);
 		printf("Sending start control packet > %s | %luB\n", file_path, file_size);
@@ -265,10 +241,10 @@ int main(int argc, char *argv[])
 			while (file_current_frame < file_split_frames)
 			{
 
-				if( (file_size / buffer_size2) == file_current_frame)
-					buffer_size = file_size % buffer_size2;
+				if( (file_size / buffer_size) == file_current_frame)
+					buffer_size = file_size % buffer_size;
 				else
-					buffer_size = buffer_size2;
+					buffer_size = buffer_size;
 
 				file_op_ret=fread(buffer_sender, buffer_size, 1, file);
 				if(file_op_ret != 1 || feof(file) > 0)
@@ -282,7 +258,7 @@ int main(int argc, char *argv[])
 				}
 
 				build_data_packet(&data_packet, &data_packet_len, file_current_frame, buffer_sender, buffer_size);
-				printf("Sending data packet > N-%03u | %luB\n", data_packet[1], buffer_size);
+				printf("Sending data packet > N-%03u | %luB\n", data_packet[1]+1, buffer_size);
 
 				err = llwrite(data_packet, data_packet_len);
 				if(err == EXIT_TIMEOUT)
@@ -292,7 +268,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		if(err != TIMEOUT)
+		if(err != EXIT_TIMEOUT)
 		{
 			// Send control packet
 			ctrl_packet[0] = TLV_END;
@@ -314,6 +290,8 @@ int main(int argc, char *argv[])
 
 	if(file_name)
 		free(file_name);
+
+	print_frame_errors();
 
 	// close connection
 	err = llclose(&oldtio, mode);

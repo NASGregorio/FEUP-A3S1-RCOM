@@ -9,11 +9,6 @@
 
 int open_port(int port, int* fd)
 {
-	// if(port < 0 || port > 2)
-	// {
-    //   	return BAD_ARGS;
-	// }
-
 	char* portName;
 
 	switch (port)

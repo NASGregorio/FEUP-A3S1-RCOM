@@ -2,15 +2,23 @@
 #define __TTY_LAYER_H__
 
 #include <termios.h>
+#include "man_made_error.h"
 
 ///// --DEBUG-- /////
+
 //#define ENABLE_DATA_PRINT
-#define ENABLE_DEBUG
+//#define ENABLE_DEBUG
+#define ENABLE_TESTING
+
+
+#ifdef ENABLE_TESTING
+	#define ENABLE_HEAD_ERROR
+	#define ENABLE_DATA_ERROR
+	#define ENABLE_FRAME_DELAY
+#endif
+
 #ifdef ENABLE_DEBUG
-	#include "man_made_error.h"
     #define DEBUG_PRINT(x) printf x
-	//#define ENABLE_BBC_ERROR
-	//#define ENABLE_BCC2_ERROR
 #else
     #define DEBUG_PRINT(x) do {} while (0)
 #endif
