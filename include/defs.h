@@ -1,7 +1,7 @@
 #ifndef __DEFS_H__
 #define __DEFS_H__
 
-#define BAUDRATE B38400
+//#define BAUDRATE B38400
 #define TTYS0 "/dev/ttyS0"
 #define TTYS1 "/dev/ttyS1"
 #define TTYS2 "/dev/ttyS2"

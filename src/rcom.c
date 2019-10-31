@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "link_layer.h"
@@ -22,6 +23,10 @@ uint8_t* buffer_rcvr;
 size_t buffer_size;
 
 int file_op_ret;
+
+struct timeval st, et;
+size_t whole_buffer_size;
+int do_once = 0;
 
 
 uint8_t calculate_size_length(long size)
@@ -155,6 +160,7 @@ int main(int argc, char *argv[])
 		fseek(file, 0, SEEK_SET);
 
 		buffer_size = strtol(argv[4],  NULL, 10);
+		whole_buffer_size = buffer_size;
 		buffer_sender = malloc(buffer_size);
 
 		file_split_frames = file_size / buffer_size;
@@ -169,7 +175,7 @@ int main(int argc, char *argv[])
 	if(mode == RECEIVER)
 	{
 		// open connection
-		err = llopen(portNumber, mode, &oldtio, strtol(argv[3], NULL, 10), strtol(argv[4], NULL, 10), strtol(argv[5], NULL, 10));
+		err = llopen(portNumber, mode, &oldtio, strtol(argv[3], NULL, 10), strtol(argv[4], NULL, 10), strtol(argv[5], NULL, 10), strtol(argv[6], NULL, 10));
 		if(err != OK)
 		{
 			printf("Failed to establish connection\n");
@@ -189,17 +195,25 @@ int main(int argc, char *argv[])
 			{
 				if(buffer_rcvr[0] == TLV_START)
 				{
-					unpack_control(&file_size, &file_name, buffer_rcvr);
+					gettimeofday(&st,NULL);
 					printf("Got start control packet > %s | %luB\n", file_name, file_size);
+
+					unpack_control(&file_size, &file_name, buffer_rcvr);
 
 					if(file_size > 256)
 						buffer_rcvr = realloc(buffer_rcvr, file_size);
 
 					file = fopen(file_name, "w");
+
 				}
 				else if(buffer_rcvr[0] == TLV_DATA)
 				{
-					
+					if(do_once == 0)
+					{
+						do_once = 1;
+						whole_buffer_size = (size_t)(buffer_rcvr[2]*256+buffer_rcvr[3]);
+					}
+
 					file_op_ret = fwrite(&buffer_rcvr[4], buffer_rcvr[2]*256+buffer_rcvr[3], 1, file);
 					if(file_op_ret != 1 && ferror(file))
 					{
@@ -211,6 +225,7 @@ int main(int argc, char *argv[])
 				}
 				else if(buffer_rcvr[0] == TLV_END)
 				{
+					gettimeofday(&et,NULL);
 					printf("Got end control packet > %s | %luB\n", file_name, file_size);
 				}
 			}
@@ -221,7 +236,7 @@ int main(int argc, char *argv[])
 	else if (mode == TRANSMITTER)
 	{
 		// open connection
-		err = llopen(portNumber, mode, &oldtio, 0, 0, 0);
+		err = llopen(portNumber, mode, &oldtio, strtol(argv[5], NULL, 10), 0, 0, 0);
 		if(err != OK)
 		{
 			printf("Failed to establish connection\n");
@@ -232,8 +247,9 @@ int main(int argc, char *argv[])
 		// Send control packet
 		build_control_packet(&ctrl_packet, &ctrl_packet_len, &file_path, file_size);
 		printf("Sending start control packet > %s | %luB\n", file_path, file_size);
-
 		err = llwrite(ctrl_packet, ctrl_packet_len);
+		
+		gettimeofday(&st,NULL);
 		if(err != EXIT_TIMEOUT)
 		{
 			// write stuff
@@ -258,18 +274,24 @@ int main(int argc, char *argv[])
 				}
 
 				build_data_packet(&data_packet, &data_packet_len, file_current_frame, buffer_sender, buffer_size);
-				printf("Sending data packet > N-%03u | %luB\n", data_packet[1]+1, buffer_size);
+				printf("Sending data packet > N-%03u | %luB | \n", data_packet[1]+1, buffer_size);
 
 				err = llwrite(data_packet, data_packet_len);
 				if(err == EXIT_TIMEOUT)
 					break;
 
 				file_current_frame++;
+
+				// gettimeofday(&et,NULL);
+				// int elapsed = ((et.tv_sec - st.tv_sec) * 1000000) + (et.tv_usec - st.tv_usec);
+				// printf("dt: %d us\n",elapsed);
 			}
 		}
 
 		if(err != EXIT_TIMEOUT)
 		{
+			gettimeofday(&et,NULL);
+
 			// Send control packet
 			ctrl_packet[0] = TLV_END;
 			err = llwrite(ctrl_packet, ctrl_packet_len);
@@ -291,7 +313,10 @@ int main(int argc, char *argv[])
 	if(file_name)
 		free(file_name);
 
-	print_frame_errors();
+	print_frame_errors(file_size, whole_buffer_size);
+
+	int elapsed = ((et.tv_sec - st.tv_sec) * 1000000) + (et.tv_usec - st.tv_usec);
+	printf("Time interval first - last data packets: %d us | %f s\n",elapsed, elapsed * 0.000001 );
 
 	// close connection
 	err = llclose(&oldtio, mode);

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+MODE="T"
+
+if [ "$2" == "$MODE" ]; then
+    echo "T"
+    date +"%T" >> logT.txt
+    sudo ./rcom $1 $2 $3 $4 $5 | grep Total -A 3 >> logT.txt && echo "" >> logT.txt
+else
+    echo "R"
+    date +"%T" >> logR.txt
+    sudo ./rcom $1 $2 $3 $4 $5 $6 | grep Total -A 3 >> logR.txt && echo "" >> logR.txt
+fi

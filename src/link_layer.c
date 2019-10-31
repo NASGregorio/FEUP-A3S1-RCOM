@@ -23,7 +23,7 @@ unsigned bcc_error_count = 0;
 unsigned bcc2_error_count = 0;
 unsigned resend_count = 0;
 unsigned missed_bcc2 = 0;
-
+unsigned baudrate = 0;
 
 uint8_t frame[MAX_FRAME_LEN];
 size_t frame_len = MAX_FRAME_LEN;
@@ -130,9 +130,9 @@ void byte_destuffing(uint8_t* frame_start, size_t* len)
 
 }
 
-void print_frame_errors()
+void print_frame_errors(unsigned byteTotal, unsigned byteSlice)
 {
-	printf("\nErrors:\n");
+	printf("\nTotal bytes: %u | packet size: %u | Baud rate: %u\n", byteTotal, byteSlice, baudrate);
 	printf("BCC     : %d | BCC2   : %d\n", bcc_error_count, bcc2_error_count);
 	printf("Retries	: %d | Resend : %d | Misses : %d\n", retries_count, resend_count, missed_bcc2);
 }
@@ -451,7 +451,7 @@ int frame_disc_reply()
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int llopen(int port, COM_MODE mode, TERMIOS* oldtio, int pc_head, int pc_data, int delay)
+int llopen(int port, COM_MODE mode, TERMIOS* oldtio, int baud, int pc_head, int pc_data, int delay)
 {
 	// Only try to open port once
 	if( fcntl(llfd, F_GETFD) == -1 && errno == EBADF )
@@ -463,9 +463,11 @@ int llopen(int port, COM_MODE mode, TERMIOS* oldtio, int pc_head, int pc_data, i
 			return err;
 
 		TERMIOS newtio;
-		err = set_port_attr(llfd, oldtio, &newtio);
+		err = set_port_attr(llfd, oldtio, &newtio, baud);
 		if(err != OK)
 			return err;
+
+		baudrate = baud;
 
 		printf("Connection open\n");
 	}
