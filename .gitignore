@@ -1,3 +1,5 @@
+/.vscode
 *.d
 *.o
 rcom
+download
