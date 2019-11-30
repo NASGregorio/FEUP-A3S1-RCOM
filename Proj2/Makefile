@@ -2,7 +2,7 @@ src = $(wildcard src/*.c)
 inc := include
 obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
-prog = rcom2
+prog = download
 
 CFLAGS = -I$(inc) -Wall -Werror
 

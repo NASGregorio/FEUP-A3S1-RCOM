@@ -145,15 +145,17 @@ void print_ftp_info(ftp_info_t* ftp_info)
     if(ftp_info == NULL)
         return;
 
-    printf("type     : %d\n", ftp_info->type);
-	printf("usr      : %s\n", ftp_info->usr);
-	printf("pwd      : %s\n", ftp_info->pwd);
-	printf("url_path : %s\n", ftp_info->url_path);
-	printf("path     : %s\n", ftp_info->path);
-	printf("filename : %s\n", ftp_info->filename);
-	printf("location : %s\n", ftp_info->location);
-	printf("host     : %s\n", ftp_info->host);
-	printf("addr     : %s\n", ftp_info->addr);
+    printf("\n--------------------------------------------------------------------------------\n");
+    printf("|TYPE     : %.68s\n", (ftp_info->type == 0 ? "ANOMYMOUS" : "LOGIN"));
+	printf("|USR      : %.68s\n", ftp_info->usr);
+	printf("|PWD      : %.68s\n", ftp_info->pwd);
+	printf("|URL      : %.68s\n", ftp_info->url_path);
+	printf("|PATH     : %.68s\n", ftp_info->path);
+	printf("|FILENAME : %.68s\n", ftp_info->filename);
+	printf("|LOCATION : %.68s\n", ftp_info->location);
+	printf("|HOST     : %.68s\n", ftp_info->host);
+	printf("|ADDR     : %.68s\n", ftp_info->addr);
+    printf("--------------------------------------------------------------------------------\n\n");
 }
 
 void free_ftp_info(ftp_info_t* ftp_info)

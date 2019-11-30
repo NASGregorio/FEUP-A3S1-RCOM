@@ -6,8 +6,7 @@
 #define GETADDRINFO_ERROR 2
 #define INVALID_URL_FORMAT 3
 #define INVALID_CHAR 4
-
-#define FALSE 0
-#define TRUE 1
+#define OPEN_SOCKET_ERROR 5
+#define CONNECT_SOCKET_ERROR 6
 
 #endif /*__DEFS_H__*/
