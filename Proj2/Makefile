@@ -4,7 +4,7 @@ obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
 prog = download
 
-CFLAGS = -I$(inc) -Wall -Werror
+CFLAGS = -I$(inc) -Wall #-Werror
 
 $(prog): $(obj)
 	$(CC) -o $@ $^ $(CFLAGS)
