@@ -71,27 +71,55 @@ int read_socket(FILE* sock_file, char** msg, size_t* msg_len)
     return OK;
 }
 
-int read_msg(int sock_fd, FILE* sock_file, char** msg, size_t* msg_len)
+int read_msg(int sock_fd, FILE* sock_file, char** msg, size_t* msg_len, size_t* msg_buf_size)
 {
     size_t pending = 0;
     usleep(200000);
     ioctl(sock_fd, SIOCINQ, &pending);
-    //printf("pending - %ld\n", pending);
+
+
+    printf("msg_buf_size - %ld\n", *msg_buf_size);
+
+		//*msg = malloc(pending + 64);
+
+
+
+		if(pending > *msg_buf_size)
+		{
+			size_t next_power_2 = *msg_buf_size;
+
+			while(pending > next_power_2)
+			{
+				next_power_2 *= 2;
+			}
+			*msg_buf_size = next_power_2;
+
+			*msg = realloc(*msg, *msg_buf_size);
+		}
+
+		memset(*msg, 0, *msg_buf_size);
+
+		fprintf(stderr, "msg_buf_size: %ld\n", *msg_buf_size);
+
 
     char* temp;
-	size_t len = 0;
+		size_t len = 0;
+		int err = 0;
 
-    int err = read_socket(sock_file, msg, msg_len);
-    if(err != OK)
-        return err;
+    // int err = read_socket(sock_file, &temp, &len);
+    // if(err != OK)
+    //     return err;
+		//
+    // printf("msg    :%s\n", *msg);
+		// printf("msg_len: %ld\n", *msg_len);
+   	// printf("pending: %ld\n", pending);
 
-    //printf("%s\n", *msg);
-   // printf("%ld\n", *msg_len);
 
-    pending -= (*msg_len);
+    //pending -= (*msg_len);
 
     while ( pending > 0 )
     {
+				fprintf(stderr, "pendingB: %ld\n", pending);
         err = read_socket(sock_file, &temp, &len);
         if(err != OK)
             return err;
@@ -104,73 +132,21 @@ int read_msg(int sock_fd, FILE* sock_file, char** msg, size_t* msg_len)
         //printf("pending - %ld\n", pending);
 
         (*msg_len) += len;
-        *msg = realloc(*msg, *msg_len);
+        //*msg = realloc(*msg, *msg_len);
         strncat(*msg, temp, len);
 
         free(temp);
     }
+
+		//fprintf(stderr, "pendingA: %ld\n", pending);
+
+		*msg_len = strlen(*msg);
 
     (*msg)[*msg_len-2] = '\0';
     (*msg_len)-=2;
 
     return OK;
 }
-
-// int read_msg(int sock_fd, FILE* sock_file, char** msg, size_t* msg_len)
-// {
-//     size_t pending = 0;
-//     usleep(100000);
-//     ioctl(sock_fd, SIOCINQ, &pending);
-//     printf("pending - %ld\n", pending);
-
-//     char* temp;
-// 	size_t len = 0;
-
-//     int err = read_socket(sock_file, msg, msg_len);
-//     if(err != OK)
-//         return err;
-
-//     // printf("%s\n", *msg);
-//     // printf("%ld\n", *msg_len);
-
-//     printf("\n\n");
-//     for (size_t i = 0; i < *msg_len; i++)
-//     {
-//         if(i != 0 && i % 16 == 0)
-//             printf("\n");
-//         printf("%02x ", (*msg)[i]);
-//     }
-//     printf("\n\n");
-
-//     pending -= (*msg_len);
-
-//     while ( pending > 0 )
-//     {
-//         err = read_socket(sock_file, &temp, &len);
-//         if(err != OK)
-//             return err;
-
-//         pending -= len;
-
-//         // printf("%s\n", temp);
-//         // printf("%ld\n", len);
-
-//         printf("\n\n");
-//         for (size_t i = 0; i < len; i++)
-//         {
-//             if(i != 0 && i % 16 == 0)
-//                 printf("\n");
-//             printf("%02x ", temp[i]);
-//         }
-//         printf("\n\n");
-
-//         //printf("%s\n", temp);
-
-//         free(temp);
-//     }
-
-//     return OK;
-// }
 
 int write_socket()
 {
@@ -192,6 +168,6 @@ int close_socket()
     // }
     // printf("\n\n");
 
-    
+
 
 }

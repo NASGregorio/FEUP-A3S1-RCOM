@@ -56,22 +56,27 @@ int main(int argc, char const *argv[])
 
 	printf("------------- CONNECTION -------------\n");
 	err = connect_socket(sock_fd, ftp_info.addr, 21);
-	if(err != OK)
-        return err;
+	if(err != OK) { return err; }
 
-	char* reply;
+
+  char* reply;
 	size_t msg_len;
-    char code[4];
-    char request[256];
-    char* line_endings = "\r\n";
+  char code[4];
+  char request[256];
+  char* line_endings = "\r\n";
 
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+  reply = malloc(256);
+  size_t reply_buf_size = 256;
+
+  err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
     strncpy(code, reply, 3);
     print_msg(reply, 1);
-    free(reply);
+    //memset(&reply, 0, reply_buf_size);
+    //memset(&reply, 0, reply_buf_size);
+    //fprintf(stderr, "reply_buf_size: %ld\n", reply_buf_size);
 
     if(strncmp(code, "220", 3) != OK)
         return -1;
@@ -81,13 +86,13 @@ int main(int argc, char const *argv[])
     snprintf(request, 256, "USER %s%s", ftp_info.usr, line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
-	if(err != OK)
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
+	  if(err != OK)
         return err;
 
     strncpy(code, reply, 3);
     print_msg(reply, 1);
-    free(reply);
+    //memset(&reply, 0, reply_buf_size);
 
     if(strncmp(code, "331", 3) != OK)
         return -1;
@@ -95,13 +100,13 @@ int main(int argc, char const *argv[])
     snprintf(request, 256, "PASS %s%s", ftp_info.pwd, line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
     strncpy(code, reply, 3);
     print_msg(reply, 1);
-    free(reply);
+    //memset(&reply, 0, reply_buf_size);
 
     if(strncmp(code, "230", 3) != OK)
         return -1;
@@ -111,13 +116,13 @@ int main(int argc, char const *argv[])
     snprintf(request, 256, "TYPE I%s", line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
     strncpy(code, reply, 3);
     print_msg(reply, 1);
-    free(reply);
+    //memset(&reply, 0, reply_buf_size);
 
     if(strncmp(code, "200", 3) != OK)
         return -1;
@@ -127,7 +132,7 @@ int main(int argc, char const *argv[])
     snprintf(request, 256, "SIZE %s%s", ftp_info.url_path, line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
@@ -140,21 +145,21 @@ int main(int argc, char const *argv[])
     size_t file_size = strtol(&reply[4], NULL, 10);
     printf("%ld\n", file_size);
 
-    
-    free(reply);
+
+    //memset(&reply, 0, reply_buf_size);
 
     printf("------------- CHANGE DIRECTORY -------------\n");
 
     snprintf(request, 256, "CWD /%s%s", ftp_info.path, line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
     strncpy(code, reply, 3);
     print_msg(reply, 1);
-    free(reply);
+    //memset(&reply, 0, reply_buf_size);
 
     if(strncmp(code, "250", 3) != OK)
         return -1;
@@ -164,7 +169,7 @@ int main(int argc, char const *argv[])
     snprintf(request, 256, "PASV%s", line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
@@ -181,7 +186,7 @@ int main(int argc, char const *argv[])
     uint8_t port_h;
     uint8_t port_l;
     err = sscanf(reply, "%*[^(](%hhu,%hhu,%hhu,%hhu,%hhu,%hhu).", &ip1, &ip2, &ip3, &ip4, &port_h, &port_l);
-    free(reply);
+    //memset(&reply, 0, reply_buf_size);
 
     if(err != 6)
         return -1;
@@ -208,7 +213,7 @@ int main(int argc, char const *argv[])
     snprintf(request, 256, "RETR %s%s", ftp_info.filename, line_endings);
     write(sock_fd, request, strlen(request));
     print_msg(request, 0);
-    err = read_msg(sock_fd, sock_file, &reply, &msg_len);
+    err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
@@ -230,13 +235,13 @@ int main(int argc, char const *argv[])
     uint8_t* data = malloc(file_size);
 	while ( (br = read(retr_fd, data, file_size)) )
     {
-		if (br < 0) 
+		if (br < 0)
         {
 			printf("Download fail\n");
 			return -1;
 		}
 
-		if ((br = fwrite(data, br, 1, dl)) < 0) 
+		if ((br = fwrite(data, br, 1, dl)) < 0)
         {
 			printf("Saving download fail\n");
 			return -1;
