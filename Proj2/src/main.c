@@ -59,24 +59,21 @@ int main(int argc, char const *argv[])
 	if(err != OK) { return err; }
 
 
-  char* reply;
+	char* reply;
 	size_t msg_len;
-  char code[4];
-  char request[256];
-  char* line_endings = "\r\n";
+	char code[4];
+	char request[256];
+	char* line_endings = "\r\n";
 
-  reply = malloc(256);
-  size_t reply_buf_size = 256;
+	reply = malloc(256);
+	size_t reply_buf_size = 256;
 
-  err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
+  	err = read_msg(sock_fd, sock_file, &reply, &msg_len, &reply_buf_size);
 	if(err != OK)
         return err;
 
     strncpy(code, reply, 3);
     print_msg(reply, 1);
-    //memset(&reply, 0, reply_buf_size);
-    //memset(&reply, 0, reply_buf_size);
-    //fprintf(stderr, "reply_buf_size: %ld\n", reply_buf_size);
 
     if(strncmp(code, "220", 3) != OK)
         return -1;
@@ -220,8 +217,11 @@ int main(int argc, char const *argv[])
     strncpy(code, reply, 3);
     print_msg(reply, 1);
 
-    if(strncmp(code, "150", 3) != OK)
-        return -1;
+	if(strncmp(code, "150", 3) != OK)
+    	return -1;
+
+	if(strstr(reply, "226") == NULL)
+		return -1;
 
     FILE* dl;
 	int br;
