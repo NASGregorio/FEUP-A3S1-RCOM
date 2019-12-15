@@ -45,11 +45,92 @@ int read_reply(int sock_fd, FILE* sock_file, char** reply, size_t* reply_len, si
 	print_msg(*reply, 1);
 
 	if(strncmp(code, code_str, 3) != OK)
-		return err;
+		return 128;
 
 	return OK;
 }
 
+
+int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
+{
+	size_t block_size = 1024;
+	uint8_t* data = malloc(block_size);
+	size_t size = file_size;
+	size_t print_timer = 1000;
+	size_t timer = 0;
+	int br = 0;
+	while ( size > 0 )
+	{
+		br = read(retr_fd, data, block_size);
+		size -= br;
+
+		if (br < 0)
+		{
+			printf("Download fail\n");
+			return 4;
+		}
+
+		if (fwrite(data, br, 1, dl) < 0)
+		{
+			printf("Saving download fail\n");
+			return 5;
+		}
+
+		if(timer >= print_timer) {
+			printf("Download: %.1f%%\n", (1-((double)size/file_size))*100);
+			timer = 0;
+		}
+		timer++;
+	}
+	printf("Download: 100.0%%\n");
+
+	free(data);
+
+	return OK;
+}
+
+int read_file_unknown(int retr_fd, FILE* dl)
+{
+	int len = 0;
+	ioctl(retr_fd, FIONREAD, &len);
+	if (len > 0) {
+
+		size_t block_size = 1024;
+		uint8_t* data = malloc(block_size);
+		size_t size = len;
+		size_t print_timer = 1000;
+		size_t timer = 0;
+		int br = 0;
+		while ( size > 0 )
+		{
+			br = read(retr_fd, data, block_size);
+			size -= br;
+
+			if (br < 0)
+			{
+				printf("Download fail\n");
+				return 4;
+			}
+
+			if (fwrite(data, br, 1, dl) < 0)
+			{
+				printf("Saving download fail\n");
+				return 5;
+			}
+
+			if(timer >= print_timer) {
+				printf("Download: %.1f%%\n", (1-((double)size/len))*100);
+				timer = 0;
+			}
+			timer++;
+		}
+		printf("Download: 100.0%%\n");
+
+		free(data);
+	}
+
+	return OK;
+}
 
 int main(int argc, char const *argv[])
 {
@@ -138,11 +219,14 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "213");
-	if(err != OK)
-		return err;
+	int got_size = 0;
+	size_t file_size = 0;
 
-	size_t file_size = strtol(&reply[4], NULL, 10);
+	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "213");
+	if(err == OK) {
+		file_size = strtol(&reply[4], NULL, 10);
+		got_size = 1;
+	}
 
 
 
@@ -179,7 +263,7 @@ int main(int argc, char const *argv[])
 	err = sscanf(reply, "%*[^(](%hhu,%hhu,%hhu,%hhu,%hhu,%hhu).", &ip1, &ip2, &ip3, &ip4, &port_h, &port_l);
 
 	if(err != 6)
-		return -1;
+		return 1;
 
 	uint16_t retr_port = port_h * 256 + port_l;
 	char retr_ip[15];
@@ -208,37 +292,28 @@ int main(int argc, char const *argv[])
 	if(err != OK)
 		return err;
 
-	if(strstr(reply, "226") == NULL)
-		return -1;
+	// if(strstr(reply, "226") == NULL)
+	// 	return 2;
 
 	FILE* dl;
-	int br;
+	char trash[1024];
 
 	if ( (dl = fopen(ftp_info.filename, "wb")) == NULL )
 	{
 		perror("fopen:");
-		return -1;
+		return 3;
 	}
 
-	uint8_t* data = malloc(file_size);
-	while ( (br = read(retr_fd, data, file_size)) )
-	{
-		if (br < 0)
-		{
-			printf("Download fail\n");
-			return -1;
-		}
+	if(got_size == 0) {
 
-		if ((br = fwrite(data, br, 1, dl)) < 0)
-		{
-			printf("Saving download fail\n");
-			return -1;
-		}
+		err = sscanf(reply, "%[^(](%ld", trash, &file_size);
+		printf("%ld\n", file_size);
 	}
+
+	read_file_w_size(retr_fd, dl, file_size);
 
 	fclose(dl);
 	free(reply);
-	free(data);
 	close(retr_fd);
 	close(sock_fd);
 	free_ftp_info(&ftp_info);
