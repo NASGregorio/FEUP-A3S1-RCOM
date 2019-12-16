@@ -8,7 +8,11 @@
 
 #include <sys/ioctl.h>
 #include <linux/sockios.h>
+#include <linux/sockios.h>
 
+#include <fcntl.h>
+#include <sys/select.h>
+#include <sys/stat.h>
 
 #include "ftp_info.h"
 #include "socket_helper.h"
@@ -23,12 +27,12 @@ void print_msg(char* msg, uint8_t is_outgoing)
 	if(is_outgoing == 0)
 	{
 		printf(">>>>>>\n");
-		printf("%s\n", msg);
+		printf("%s", msg);
 	}
 	else
 	{
 		printf("<<<<<<\n");
-		printf("%s\n\n", msg);
+		printf("%s", msg);
 	}
 }
 
@@ -132,6 +136,84 @@ int read_file_unknown(int retr_fd, FILE* dl)
 	return OK;
 }
 
+int read_msg2(int sock_fd, char* code_str) {
+
+	uint8_t msg[256] = "";
+	uint8_t len = 0;
+
+	uint8_t res = 0;
+	uint8_t buf[1] = "";
+
+	char code[4];
+
+
+	while ( 1 )
+	{
+
+		res = read(sock_fd,buf,1);
+		if (res == -1)
+		{
+			perror("read: ");
+			return 200;
+		}
+
+		//printf("%c ", buf[0]);
+
+		msg[len++] = buf[0];
+
+		if( (msg[len - 2] == '\r' && msg[len - 1] == '\n') || len == 256 )
+		{
+			//printf("%s", msg);
+
+			strncpy(code, msg, 3);
+			printf("%s", msg);
+
+			if(strncmp(code, code_str, 3) != OK)
+				return 128;
+			else
+				return OK;
+		}
+    }
+
+	return 200;
+}
+
+int read_msg_block(int sock_fd, char* code_str) {
+
+	printf("<<<<<<\n");
+
+	fd_set read_check;
+	FD_ZERO(&read_check);
+	FD_SET(sock_fd, &read_check);
+	struct timeval timeout;
+	char code[4];
+
+	int retries = 3;
+
+	while( retries > 0 ) {
+  		timeout.tv_sec = 0;
+        timeout.tv_usec = 100 * 1000;
+
+		int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
+		if (n == -1) {
+			retries--;
+			continue;
+		} 
+		else if (n == 0) {
+			retries--;
+			continue;
+		}
+		if (!FD_ISSET(sock_fd, &read_check)) {
+			retries--;
+			continue;
+		}
+
+		read_msg2(sock_fd, code_str);
+	}
+
+	return OK;
+}
+
 int main(int argc, char const *argv[])
 {
 	if(argc != 2)
@@ -170,12 +252,10 @@ int main(int argc, char const *argv[])
 	reply = malloc(256);
 	size_t reply_buf_size = 256;
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "220");
+	err = read_msg_block(sock_fd, "220");
 	if(err != OK)
 		return err;
 
-
-	
 
 	printf("------------- AUTHENTIFICATION -------------\n");
 
@@ -183,17 +263,15 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "331");
+	err = read_msg_block(sock_fd, "331");
 	if(err != OK)
 		return err;
-
-
 
 	snprintf(request, 256, "PASS %s%s", ftp_info.pwd, line_endings);
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "230");
+	err = read_msg_block(sock_fd, "230");
 	if(err != OK)
 		return err;
 
@@ -206,7 +284,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "200");
+	err = read_msg_block(sock_fd, "200");
 	if(err != OK)
 		return err;
 
@@ -222,13 +300,11 @@ int main(int argc, char const *argv[])
 	int got_size = 0;
 	size_t file_size = 0;
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "213");
+	err = read_msg_block(sock_fd, "213");
 	if(err == OK) {
 		file_size = strtol(&reply[4], NULL, 10);
 		got_size = 1;
 	}
-
-
 
 
 	printf("------------- CHANGE DIRECTORY -------------\n");
@@ -237,7 +313,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "250");
+	err = read_msg_block(sock_fd, "250");
 	if(err != OK)
 		return err;
 
@@ -250,7 +326,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "227");
+	err = read_msg_block(sock_fd, "227");
 	if(err != OK)
 		return err;
 
@@ -288,12 +364,13 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_reply(sock_fd, sock_file, &reply, &reply_len, &reply_buf_size, "150");
+	err = read_msg_block(sock_fd, "150");
 	if(err != OK)
 		return err;
 
-	// if(strstr(reply, "226") == NULL)
-	// 	return 2;
+	err = read_msg_block(sock_fd, "226");
+	if(err != OK)
+		return err;
 
 	FILE* dl;
 	char trash[1024];
