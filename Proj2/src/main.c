@@ -54,6 +54,7 @@ void print_msg(char* msg, uint8_t is_outgoing)
 // 	return OK;
 // }
 
+char dl_buf[100] = {0};
 
 int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
 {
@@ -81,12 +82,24 @@ int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
 		}
 
 		if(timer >= print_timer) {
-			printf("Download: %.1f%%\n", (1-((double)size/file_size))*100);
+			double j = (1-((double)size/file_size))*100;
+			int k = (int)j/5;
+
+			printf("Download: %.1f%% [%.*s>%.*s]\r", j, k, "====================", (20-k), "                    ");
+
+			// memset(dl_buf, 0, 100);
+			// for (size_t i = 0; i < k/10; i++)
+			// {
+			// 	sprintf(dl_buf, "%s#", dl_buf);
+			// }
+			
+			// printf("Download: %.1f%%", j);
+			// printf(" %s\r", dl_buf);
+			fflush(stdout);
 			timer = 0;
 		}
 		timer++;
 	}
-	printf("Download: 100.0%%\n");
 
 	free(data);
 
@@ -155,7 +168,7 @@ int read_msg_block(int sock_fd, char* code_str) {
 
 	while( retries > 0 ) {
   		timeout.tv_sec = 0;
-        timeout.tv_usec = 500 * 1000;
+        timeout.tv_usec = 100 * 1000;
 
 		int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
 		if (n == -1) {
@@ -180,15 +193,15 @@ int read_msg_block(int sock_fd, char* code_str) {
 	return OK;
 }
 
-int read_single_msg(int sock_fd, char* code_str, char** msg) {
+int read_single_msg(int sock_fd, char* code_str, char** msg, size_t tsec, size_t tusec) {
 
 	fd_set read_check;
 	FD_ZERO(&read_check);
 	FD_SET(sock_fd, &read_check);
 	struct timeval timeout;
 
-	timeout.tv_sec = 30;
-	timeout.tv_usec = 0;
+	timeout.tv_sec = tsec;
+	timeout.tv_usec = tusec;
 
 	int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
 	if (n == -1) {
@@ -208,16 +221,14 @@ int read_single_msg(int sock_fd, char* code_str, char** msg) {
 	return read_msg2(sock_fd, code_str, msg);
 }
 
-int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str) {
+int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str, size_t tsec, size_t tusec) {
 
-	int err = read_single_msg(sock_fd, code1_str, NULL);
+	int err = read_single_msg(sock_fd, code1_str, NULL, tsec, tusec);
 	if(err != OK)
 		return err;
 
-	sleep(1);
-
-	err = read_single_msg(sock_fd, code2_str, NULL);
-	return err;
+	read_single_msg(sock_fd, code2_str, NULL, 0, 500*1000);
+	return OK;
 }
 
 int main(int argc, char const *argv[])
@@ -252,6 +263,8 @@ int main(int argc, char const *argv[])
 		return err;
 
 	char* reply;
+	size_t timeout_sec = 30;
+	size_t timeout_usec = 0;
 	//size_t reply_len;
 	char request[256];
 	char* line_endings = "\r\n";
@@ -268,7 +281,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_single_msg(sock_fd, "331", &reply);
+	err = read_single_msg(sock_fd, "331", NULL, timeout_sec, timeout_usec);
 	if(err != OK)
 		return err;
 
@@ -276,7 +289,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_single_msg(sock_fd, "230", &reply);
+	err = read_single_msg(sock_fd, "230", NULL, timeout_sec, timeout_usec);
 	if(err != OK)
 		return err;
 
@@ -289,7 +302,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_single_msg(sock_fd, "200", &reply);
+	err = read_single_msg(sock_fd, "200", NULL, timeout_sec, timeout_usec);
 	if(err != OK)
 		return err;
 
@@ -305,10 +318,11 @@ int main(int argc, char const *argv[])
 	int got_size = 0;
 	size_t file_size = 0;
 
-	err = read_single_msg(sock_fd, "213", &reply);
+	err = read_single_msg(sock_fd, "213", &reply, timeout_sec, timeout_usec);
 	if(err == OK) {
 		file_size = strtol(&reply[4], NULL, 10);
 		got_size = 1;
+		free(reply);
 	}
 
 
@@ -331,7 +345,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_single_msg(sock_fd, "227", &reply);
+	err = read_single_msg(sock_fd, "227", &reply, timeout_sec, timeout_usec);
 	if(err != OK)
 		return err;
 
@@ -342,6 +356,8 @@ int main(int argc, char const *argv[])
 	uint8_t port_h;
 	uint8_t port_l;
 	err = sscanf(reply, "%*[^(](%hhu,%hhu,%hhu,%hhu,%hhu,%hhu).", &ip1, &ip2, &ip3, &ip4, &port_h, &port_l);
+
+	free(reply);
 
 	if(err != 6)
 		return 1;
@@ -369,7 +385,8 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_two_step_msg(sock_fd, "150", "260");
+	err = read_two_step_msg(sock_fd, "150", "226", timeout_sec, timeout_usec);
+	//err = read_msg_block(sock_fd, "150");
 	if(err != OK)
 		return err;
 
@@ -395,6 +412,8 @@ int main(int argc, char const *argv[])
 	close(retr_fd);
 	close(sock_fd);
 	free_ftp_info(&ftp_info);
+
+	printf("Download: 100.0%% [====================]\n");
 
 	return OK;
 }
