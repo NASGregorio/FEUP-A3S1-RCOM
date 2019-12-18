@@ -5,8 +5,12 @@ int open_socket(int* sock_fd, FILE** sock_file);
 
 int connect_socket(int sock_fd, char* addr, uint16_t port);
 
-int read_socket(FILE* sock_file, char** msg, size_t* msg_len);
+int read_file_w_size(int retr_fd, FILE* dl, size_t file_size);
 
-int read_msg(int sock_fd, FILE* sock_file, char** msg, size_t* msg_len, size_t* msg_buf_size);
+int read_msg_block(int sock_fd, char* code_str);
+
+int read_single_msg(int sock_fd, char* code_str, char** msg, size_t tsec, size_t tusec);
+
+int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str, size_t tsec, size_t tusec);
 
 #endif /*__SOCKET_HELPER__*/

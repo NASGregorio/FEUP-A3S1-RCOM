@@ -1,22 +1,10 @@
-#include <arpa/inet.h>
 #include <stdio.h>
-
-
-#include <unistd.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
 #include <string.h>
-
-#include <sys/ioctl.h>
-#include <linux/sockios.h>
-#include <linux/sockios.h>
-
-//#include <sys/time.h>
-//#include <sys/resource.h>
 #include <time.h>
 
-#include <fcntl.h>
-#include <sys/select.h>
-#include <sys/stat.h>
 
 #include "ftp_info.h"
 #include "socket_helper.h"
@@ -38,172 +26,6 @@ void print_msg(char* msg, uint8_t is_outgoing)
 		printf("<<<<<<\n");
 		printf("%s", msg);
 	}
-}
-
-int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
-{
-	size_t block_size = 1024;
-	uint8_t* data = malloc(block_size);
-	size_t size = file_size;
-	size_t print_timer = 1000;
-	size_t timer = 0;
-	int br = 0;
-	while ( size > 0 )
-	{
-		br = read(retr_fd, data, block_size);
-		size -= br;
-
-		if (br < 0)
-		{
-			printf("Download fail\n");
-			return 4;
-		}
-
-		if (fwrite(data, br, 1, dl) < 0)
-		{
-			printf("Saving download fail\n");
-			return 5;
-		}
-
-		if(timer >= print_timer) {
-			double j = (1-((double)size/file_size))*100;
-			int k = (int)j/5;
-
-			printf("Download: %.1f%% [%.*s>%.*s]\r", j, k, "====================", (20-k), "                    ");
-			fflush(stdout);
-			timer = 0;
-		}
-		timer++;
-	}
-
-	free(data);
-
-	return OK;
-}
-
-int read_msg2(int sock_fd, char* code_str, char** out_msg) {
-
-	char msg[256] = "";
-	uint8_t len = 0;
-
-	uint8_t res = 0;
-	char buf[1] = "";
-
-	char code[4];
-
-
-	while ( 1 )
-	{
-
-		res = read(sock_fd,buf,1);
-		if (res == -1)
-		{
-			perror("read: ");
-			return 200;
-		}
-
-		msg[len++] = buf[0];
-
-		if( (msg[len - 2] == '\r' && msg[len - 1] == '\n') || len == 256 )
-		{
-
-			strncpy(code, msg, 3);
-			printf("%s", msg);
-
-			if(strncmp(code, code_str, 3) != OK)
-			{
-				return 128;
-			}
-			else
-			{
-				if(out_msg != NULL)
-				{
-					*out_msg = malloc(strlen(msg));
-					strncpy(*out_msg, msg, strlen(msg));
-				}
-				return OK;
-			}
-		}
-    }
-
-	return 200;
-}
-
-int read_msg_block(int sock_fd, char* code_str) {
-
-	printf("<<<<<<\n");
-
-	fd_set read_check;
-	FD_ZERO(&read_check);
-	FD_SET(sock_fd, &read_check);
-	struct timeval timeout;
-	//char code[4];
-
-	int retries = 3;
-
-	while( retries > 0 ) {
-  		timeout.tv_sec = 0;
-        timeout.tv_usec = 100 * 1000;
-
-		int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
-		if (n == -1) {
-			retries--;
-			continue;
-		} 
-		else if (n == 0) {
-			retries--;
-			continue;
-		}
-		if (!FD_ISSET(sock_fd, &read_check)) {
-			retries--;
-			continue;
-		}
-
-		if(read_msg2(sock_fd, code_str, NULL) != OK) {
-			return 128;
-		}
-		retries = 3;
-	}
-
-	return OK;
-}
-
-int read_single_msg(int sock_fd, char* code_str, char** msg, size_t tsec, size_t tusec) {
-
-	fd_set read_check;
-	FD_ZERO(&read_check);
-	FD_SET(sock_fd, &read_check);
-	struct timeval timeout;
-
-	timeout.tv_sec = tsec;
-	timeout.tv_usec = tusec;
-
-	int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
-	if (n == -1) {
-		printf("Read Timeout\n");
-		return -1;
-	} 
-	else if (n == 0) {
-		printf("Read Timeout\n");
-		return -1;
-	}
-	if (!FD_ISSET(sock_fd, &read_check)) {
-		printf("Read Timeout\n");
-		return -1;
-	}
-
-	printf("<<<<<<\n");
-	return read_msg2(sock_fd, code_str, msg);
-}
-
-int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str, size_t tsec, size_t tusec) {
-
-	int err = read_single_msg(sock_fd, code1_str, NULL, tsec, tusec);
-	if(err != OK)
-		return err;
-
-	read_single_msg(sock_fd, code2_str, NULL, 0, 500*1000);
-	return OK;
 }
 
 int main(int argc, char const *argv[])
@@ -240,10 +62,8 @@ int main(int argc, char const *argv[])
 	char* reply;
 	size_t timeout_sec = 30;
 	size_t timeout_usec = 0;
-	//size_t reply_len;
 	char request[256];
 	char* line_endings = "\r\n";
-	//size_t reply_buf_size = 256;
 
 	err = read_msg_block(sock_fd, "220");
 	if(err != OK)

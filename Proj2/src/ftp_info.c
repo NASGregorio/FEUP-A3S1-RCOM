@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 #include <netdb.h>
-#include<arpa/inet.h>
+#include <arpa/inet.h>
 
 #include "ftp_info.h"
 #include "defs.h"
