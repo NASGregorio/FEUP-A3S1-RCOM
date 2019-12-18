@@ -10,6 +10,10 @@
 #include <linux/sockios.h>
 #include <linux/sockios.h>
 
+//#include <sys/time.h>
+//#include <sys/resource.h>
+#include <time.h>
+
 #include <fcntl.h>
 #include <sys/select.h>
 #include <sys/stat.h>
@@ -35,26 +39,6 @@ void print_msg(char* msg, uint8_t is_outgoing)
 		printf("%s", msg);
 	}
 }
-
-
-// int read_reply(int sock_fd, FILE* sock_file, char** reply, size_t* reply_len, size_t* reply_buf_size, char* code_str)
-// {
-// 	char code[4];
-
-// 	int err = read_msg(sock_fd, sock_file, reply, reply_len, reply_buf_size);
-// 	if(err != OK)
-// 		return err;
-
-// 	strncpy(code, *reply, 3);
-// 	print_msg(*reply, 1);
-
-// 	if(strncmp(code, code_str, 3) != OK)
-// 		return 128;
-
-// 	return OK;
-// }
-
-char dl_buf[100] = {0};
 
 int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
 {
@@ -86,15 +70,6 @@ int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
 			int k = (int)j/5;
 
 			printf("Download: %.1f%% [%.*s>%.*s]\r", j, k, "====================", (20-k), "                    ");
-
-			// memset(dl_buf, 0, 100);
-			// for (size_t i = 0; i < k/10; i++)
-			// {
-			// 	sprintf(dl_buf, "%s#", dl_buf);
-			// }
-			
-			// printf("Download: %.1f%%", j);
-			// printf(" %s\r", dl_buf);
 			fflush(stdout);
 			timer = 0;
 		}
@@ -386,12 +361,12 @@ int main(int argc, char const *argv[])
 	print_msg(request, 0);
 
 	err = read_two_step_msg(sock_fd, "150", "226", timeout_sec, timeout_usec);
-	//err = read_msg_block(sock_fd, "150");
 	if(err != OK)
 		return err;
 
 	FILE* dl;
 	char trash[1024];
+
 
 	if ( (dl = fopen(ftp_info.filename, "wb")) == NULL )
 	{
@@ -405,7 +380,18 @@ int main(int argc, char const *argv[])
 		printf("%ld\n", file_size);
 	}
 
+  	struct timespec start, end;
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
 	read_file_w_size(retr_fd, dl, file_size);
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+
+	fseek(dl, 0L, SEEK_END);
+	long received_size = ftell(dl);
+
 
 	fclose(dl);
 	free(reply);
@@ -413,7 +399,18 @@ int main(int argc, char const *argv[])
 	close(sock_fd);
 	free_ftp_info(&ftp_info);
 
+	long seconds = end.tv_sec - start.tv_sec; 
+    long ns = end.tv_nsec - start.tv_nsec; 
+    
+    if (start.tv_nsec > end.tv_nsec) { // clock underflow 
+		--seconds; 
+		ns += 1000000000; 
+    } 
+
 	printf("Download: 100.0%% [====================]\n");
+	printf("Expected size: %ld\n", file_size);
+	printf("Received size: %ld\n", received_size);
+    printf("Total time: %f\n", (double)seconds + (double)ns/(double)1000000000); 
 
 	return OK;
 }
