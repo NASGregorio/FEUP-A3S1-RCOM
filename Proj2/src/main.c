@@ -37,22 +37,22 @@ void print_msg(char* msg, uint8_t is_outgoing)
 }
 
 
-int read_reply(int sock_fd, FILE* sock_file, char** reply, size_t* reply_len, size_t* reply_buf_size, char* code_str)
-{
-	char code[4];
+// int read_reply(int sock_fd, FILE* sock_file, char** reply, size_t* reply_len, size_t* reply_buf_size, char* code_str)
+// {
+// 	char code[4];
 
-	int err = read_msg(sock_fd, sock_file, reply, reply_len, reply_buf_size);
-	if(err != OK)
-		return err;
+// 	int err = read_msg(sock_fd, sock_file, reply, reply_len, reply_buf_size);
+// 	if(err != OK)
+// 		return err;
 
-	strncpy(code, *reply, 3);
-	print_msg(*reply, 1);
+// 	strncpy(code, *reply, 3);
+// 	print_msg(*reply, 1);
 
-	if(strncmp(code, code_str, 3) != OK)
-		return 128;
+// 	if(strncmp(code, code_str, 3) != OK)
+// 		return 128;
 
-	return OK;
-}
+// 	return OK;
+// }
 
 
 int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
@@ -93,56 +93,13 @@ int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
 	return OK;
 }
 
-int read_file_unknown(int retr_fd, FILE* dl)
-{
-	int len = 0;
-	ioctl(retr_fd, FIONREAD, &len);
-	if (len > 0) {
+int read_msg2(int sock_fd, char* code_str, char** out_msg) {
 
-		size_t block_size = 1024;
-		uint8_t* data = malloc(block_size);
-		size_t size = len;
-		size_t print_timer = 1000;
-		size_t timer = 0;
-		int br = 0;
-		while ( size > 0 )
-		{
-			br = read(retr_fd, data, block_size);
-			size -= br;
-
-			if (br < 0)
-			{
-				printf("Download fail\n");
-				return 4;
-			}
-
-			if (fwrite(data, br, 1, dl) < 0)
-			{
-				printf("Saving download fail\n");
-				return 5;
-			}
-
-			if(timer >= print_timer) {
-				printf("Download: %.1f%%\n", (1-((double)size/len))*100);
-				timer = 0;
-			}
-			timer++;
-		}
-		printf("Download: 100.0%%\n");
-
-		free(data);
-	}
-
-	return OK;
-}
-
-int read_msg2(int sock_fd, char* code_str) {
-
-	uint8_t msg[256] = "";
+	char msg[256] = "";
 	uint8_t len = 0;
 
 	uint8_t res = 0;
-	uint8_t buf[1] = "";
+	char buf[1] = "";
 
 	char code[4];
 
@@ -157,21 +114,27 @@ int read_msg2(int sock_fd, char* code_str) {
 			return 200;
 		}
 
-		//printf("%c ", buf[0]);
-
 		msg[len++] = buf[0];
 
 		if( (msg[len - 2] == '\r' && msg[len - 1] == '\n') || len == 256 )
 		{
-			//printf("%s", msg);
 
 			strncpy(code, msg, 3);
 			printf("%s", msg);
 
 			if(strncmp(code, code_str, 3) != OK)
+			{
 				return 128;
+			}
 			else
+			{
+				if(out_msg != NULL)
+				{
+					*out_msg = malloc(strlen(msg));
+					strncpy(*out_msg, msg, strlen(msg));
+				}
 				return OK;
+			}
 		}
     }
 
@@ -186,13 +149,13 @@ int read_msg_block(int sock_fd, char* code_str) {
 	FD_ZERO(&read_check);
 	FD_SET(sock_fd, &read_check);
 	struct timeval timeout;
-	char code[4];
+	//char code[4];
 
 	int retries = 3;
 
 	while( retries > 0 ) {
   		timeout.tv_sec = 0;
-        timeout.tv_usec = 100 * 1000;
+        timeout.tv_usec = 500 * 1000;
 
 		int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
 		if (n == -1) {
@@ -208,10 +171,53 @@ int read_msg_block(int sock_fd, char* code_str) {
 			continue;
 		}
 
-		read_msg2(sock_fd, code_str);
+		if(read_msg2(sock_fd, code_str, NULL) != OK) {
+			return 128;
+		}
+		retries = 3;
 	}
 
 	return OK;
+}
+
+int read_single_msg(int sock_fd, char* code_str, char** msg) {
+
+	fd_set read_check;
+	FD_ZERO(&read_check);
+	FD_SET(sock_fd, &read_check);
+	struct timeval timeout;
+
+	timeout.tv_sec = 30;
+	timeout.tv_usec = 0;
+
+	int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
+	if (n == -1) {
+		printf("Read Timeout\n");
+		return -1;
+	} 
+	else if (n == 0) {
+		printf("Read Timeout\n");
+		return -1;
+	}
+	if (!FD_ISSET(sock_fd, &read_check)) {
+		printf("Read Timeout\n");
+		return -1;
+	}
+
+	printf("<<<<<<\n");
+	return read_msg2(sock_fd, code_str, msg);
+}
+
+int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str) {
+
+	int err = read_single_msg(sock_fd, code1_str, NULL);
+	if(err != OK)
+		return err;
+
+	sleep(1);
+
+	err = read_single_msg(sock_fd, code2_str, NULL);
+	return err;
 }
 
 int main(int argc, char const *argv[])
@@ -246,11 +252,10 @@ int main(int argc, char const *argv[])
 		return err;
 
 	char* reply;
-	size_t reply_len;
+	//size_t reply_len;
 	char request[256];
 	char* line_endings = "\r\n";
-	reply = malloc(256);
-	size_t reply_buf_size = 256;
+	//size_t reply_buf_size = 256;
 
 	err = read_msg_block(sock_fd, "220");
 	if(err != OK)
@@ -263,7 +268,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_msg_block(sock_fd, "331");
+	err = read_single_msg(sock_fd, "331", &reply);
 	if(err != OK)
 		return err;
 
@@ -271,7 +276,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_msg_block(sock_fd, "230");
+	err = read_single_msg(sock_fd, "230", &reply);
 	if(err != OK)
 		return err;
 
@@ -284,7 +289,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_msg_block(sock_fd, "200");
+	err = read_single_msg(sock_fd, "200", &reply);
 	if(err != OK)
 		return err;
 
@@ -300,7 +305,7 @@ int main(int argc, char const *argv[])
 	int got_size = 0;
 	size_t file_size = 0;
 
-	err = read_msg_block(sock_fd, "213");
+	err = read_single_msg(sock_fd, "213", &reply);
 	if(err == OK) {
 		file_size = strtol(&reply[4], NULL, 10);
 		got_size = 1;
@@ -326,7 +331,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_msg_block(sock_fd, "227");
+	err = read_single_msg(sock_fd, "227", &reply);
 	if(err != OK)
 		return err;
 
@@ -364,11 +369,7 @@ int main(int argc, char const *argv[])
 	write(sock_fd, request, strlen(request));
 	print_msg(request, 0);
 
-	err = read_msg_block(sock_fd, "150");
-	if(err != OK)
-		return err;
-
-	err = read_msg_block(sock_fd, "226");
+	err = read_two_step_msg(sock_fd, "150", "260");
 	if(err != OK)
 		return err;
 
