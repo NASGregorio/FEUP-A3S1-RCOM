@@ -227,6 +227,7 @@ int main(int argc, char const *argv[])
 		ns += 1000000000; 
     } 
 
+	fflush(stdout);
 	printf("Download: 100.0%% [====================]\n");
 	printf("Expected size: %ld\n", file_size);
 	printf("Received size: %ld\n", received_size);
