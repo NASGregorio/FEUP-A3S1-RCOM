@@ -1,15 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <netdb.h>
-#include<arpa/inet.h>
+#include <arpa/inet.h>
 
 #include "ftp_info.h"
 #include "defs.h"
 
 
-const char* valid_login = "abcdefghijklmnopqrstuvxywzABCDEFGHIJKLMNOPQRSTUVXYWZ0123456789";
+const char* valid_login = "abcdefghijklmnopqrstuvxywzABCDEFGHIJKLMNOPQRSTUVXYWZ0123456789@.";
 const char* valid_url = "abcdefghijklmnopqrstuvxywzABCDEFGHIJKLMNOPQRSTUVXYWZ0123456789-_./";
 
 typedef struct addrinfo addrinfo_t;
@@ -35,7 +36,8 @@ int host_to_ipv4(const char* hostname, ftp_info_t* ftp_info)
     // Translate host to ip address
     int err = getaddrinfo(hostname, "21", &hints, &results);
     if (err != OK) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
+        //fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
+        printf("Failed to resolve host name\n");
         return GETADDRINFO_ERROR;
     }
 
@@ -87,17 +89,56 @@ int validade_string(char* str, const char* valid, char* field_name)
 int build_ftp_info(const char* full_url, ftp_info_t* ftp_info)
 {
 
-    char usr[256];
-    char pwd[256];
-    char location[256];
-    char url_path[256];
+    char usr[256] = {0};
+    char pwd[256] = {0};
+    char location[256] = {0};
+    char url_path[256] = {0};
+    char prompt[300] = {0};
 
-	// Invalid format
-    int count = sscanf(full_url, "ftp://[%255[^:]:%255[^@]@]%255[^/]/%255s", usr, pwd, location, url_path);
-    if(count != EXPECTED_URL_COUNT) {
-        printf("No match: %d\n", count);
-        return INVALID_URL_FORMAT;
+    // Try User and password
+    int i = sscanf(full_url, "ftp://%255[^:]:%255[^@]@%255[^/]%255s", usr, pwd, location, url_path);
+    if (i != 4)
+    {
+        // Try User only
+        memset(usr, 0, 256);
+        memset(pwd, 0, 256);
+        memset(location, 0, 256);
+        memset(url_path, 0, 256);
+        i = sscanf(full_url, "ftp://%255[^@]@%255[^/]%255s", usr, location, url_path);
+        if(i != 3)
+        {
+            // Try Anonymous mode
+            memset(usr, 0, 256);
+            memset(location, 0, 256);
+            memset(url_path, 0, 256);
+            i = sscanf(full_url, "ftp://%255[^/]%255s", location, url_path);
+            if (i != 2)
+            {
+                printf("Invalid URL format. Try:\n");
+                printf("download ftp://<user>:<password>@<host>/<url-path>\n");
+                printf("download ftp://<user>@<host>/<url-path>\n");
+                printf("download ftp://<host>/<url-path>\n");
+                return INVALID_URL_FORMAT;
+            }
+            else
+            {
+                strncpy(usr, "anonymous", 9);
+                strncpy(pwd, "anonymous", 9);
+            }
+        }
+        else
+        {
+            sprintf(prompt, "Type password for user %s: ", usr);
+            char* pass = getpass(prompt);
+            if(pass == NULL)
+            {
+                printf("Invalid password\n");
+                return INVALID_URL_FORMAT; 
+            }
+            strncpy(pwd, pass, strlen(pass));
+        }
     }
+    
 
 	// Invalid characters
     if (validade_string(usr, valid_login, "USER") != OK ||

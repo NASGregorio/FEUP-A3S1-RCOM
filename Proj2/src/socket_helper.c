@@ -1,16 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <string.h>
-//#include <fcntl.h>
-#include <sys/ioctl.h>
+#include <stdarg.h>
 #include <unistd.h>
-#include <linux/sockios.h>
+#include <string.h>
 
-#include "defs.h"
+#include <arpa/inet.h>
+
 #include "socket_helper.h"
+#include "defs.h"
+
+char request[256];
 
 int open_socket(int* sock_fd, FILE** sock_file)
 {
@@ -43,110 +42,177 @@ int connect_socket(int sock_fd, char* addr, uint16_t port)
 	return OK;
 }
 
-int read_socket(FILE* sock_file, char** msg, size_t* msg_len)
+int read_msg(int sock_fd, char* code_str, char** out_msg)
 {
-	size_t buf_size = 256;
 
-	char buf[buf_size];
-	size_t buf_len;
+	char msg[256] = "";
+	uint8_t len = 0;
 
-	*msg = malloc(buf_size);
-	fgets(*msg, buf_size, sock_file);
-	*msg_len = strlen(*msg);
+	uint8_t res = 0;
+	char buf[1] = "";
+
+	char code[4];
 
 
-	while ((*msg)[*msg_len - 2] != '\r' && (*msg)[*msg_len - 1] != '\n')
+	while ( 1 )
 	{
-		fgets(buf, buf_size+1, sock_file);
-		buf_len = strlen(buf);
 
-		*msg_len += buf_len;
-		*msg = realloc(*msg, *msg_len);
-		strcat(*msg, buf);
+		res = read(sock_fd,buf,1);
+		if (res == -1)
+		{
+			perror("read: ");
+			return 200;
+		}
+
+		msg[len++] = buf[0];
+
+		if( (msg[len - 2] == '\r' && msg[len - 1] == '\n') || len == 256 )
+		{
+
+			strncpy(code, msg, 3);
+			printf("%s", msg);
+
+			if(strncmp(code, code_str, 3) != OK)
+			{
+				printf("Return code mismatch\n");
+				return 128;
+			}
+			else
+			{
+				if(out_msg != NULL)
+				{
+					*out_msg = malloc(strlen(msg));
+					strncpy(*out_msg, msg, strlen(msg));
+				}
+				return OK;
+			}
+		}
+    }
+}
+
+int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
+{
+	size_t block_size = 1024;
+	uint8_t* data = malloc(block_size);
+	size_t size = file_size;
+	size_t print_timer = 1000;
+	size_t timer = 0;
+	int br = 0;
+	while ( size > 0 )
+	{
+		br = read(retr_fd, data, block_size);
+		size -= br;
+
+		if (br < 0)
+		{
+			printf("Download fail\n");
+			return 4;
+		}
+
+		if (fwrite(data, br, 1, dl) < 0)
+		{
+			printf("Saving download fail\n");
+			return 5;
+		}
+
+		if(timer >= print_timer) {
+			double j = (1-((double)size/file_size))*100;
+			int k = (int)j/5;
+
+			printf("Download: %.1f%% [%.*s>%.*s]\r", j, k, "====================", (20-k), "                    ");
+			fflush(stdout);
+			timer = 0;
+		}
+		timer++;
 	}
 
-	// (*msg)[*msg_len-2] = '\0';
-	// (*msg_len)-=2;
+	free(data);
+
+	fflush(stdout);
+	printf("Download: 100.0%% [====================]\n");
 
 	return OK;
 }
 
-int read_msg(int sock_fd, FILE* sock_file, char** msg, size_t* msg_len, size_t* msg_buf_size)
+int read_msg_block(int sock_fd, char* code_str)
 {
-	size_t pending = 0;
-	usleep(200000);
-	ioctl(sock_fd, SIOCINQ, &pending);
 
-	//printf("msg_buf_size - %ld\n", *msg_buf_size);
-	if(pending > *msg_buf_size)
-	{
-		size_t next_power_2 = *msg_buf_size;
+	printf("<<<<<<\n");
 
-		while(pending > next_power_2)
-			next_power_2 *= 2;
+	fd_set read_check;
+	FD_ZERO(&read_check);
+	FD_SET(sock_fd, &read_check);
+	struct timeval timeout;
+	//char code[4];
 
-		*msg_buf_size = next_power_2;
-		*msg = realloc(*msg, *msg_buf_size);
+	int retries = 3;
+
+	while( retries > 0 ) {
+  		timeout.tv_sec = 0;
+        timeout.tv_usec = 100 * 1000;
+
+		int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
+		if (n == -1) {
+			retries--;
+			continue;
+		} 
+		else if (n == 0) {
+			retries--;
+			continue;
+		}
+		if (!FD_ISSET(sock_fd, &read_check)) {
+			retries--;
+			continue;
+		}
+
+		if(read_msg(sock_fd, code_str, NULL) != OK) {
+			return 128;
+		}
+		retries = 3;
 	}
-
-	memset(*msg, 0, *msg_buf_size);
-	//fprintf(stderr, "msg_buf_size: %ld\n", *msg_buf_size);
-
-	char* temp;
-	size_t len = 0;
-	int err = 0;
-
-	while ( pending > 0 )
-	{
-		//fprintf(stderr, "pendingB: %ld\n", pending);
-		err = read_socket(sock_file, &temp, &len);
-		if(err != OK)
-			return err;
-
-		//printf("%s\n", temp);
-		//printf("%ld\n", len);
-
-		pending -= len;
-
-		//printf("pending - %ld\n", pending);
-
-		(*msg_len) += len;
-		//*msg = realloc(*msg, *msg_len);
-		strncat(*msg, temp, len);
-
-		free(temp);
-	}
-
-	//fprintf(stderr, "pendingA: %ld\n", pending);
-
-	*msg_len = strlen(*msg);
-
-	(*msg)[*msg_len-2] = '\0';
-	(*msg_len)-=2;
 
 	return OK;
 }
 
-int write_socket()
+int read_single_msg(int sock_fd, char* code_str, char** msg, size_t tsec, size_t tusec)
 {
-	return OK;
 
+	fd_set read_check;
+	FD_ZERO(&read_check);
+	FD_SET(sock_fd, &read_check);
+	struct timeval timeout;
+
+	timeout.tv_sec = tsec;
+	timeout.tv_usec = tusec;
+
+	int n = select(sock_fd + 1, &read_check, NULL, NULL, &timeout);
+	if (n == -1) {
+		printf("Read Timeout\n");
+		return -1;
+	} 
+	else if (n == 0) {
+		printf("Read Timeout\n");
+		return -1;
+	}
+	if (!FD_ISSET(sock_fd, &read_check)) {
+		printf("Read Timeout\n");
+		return -1;
+	}
+
+	printf("<<<<<<\n");
+	return read_msg(sock_fd, code_str, msg);
 }
 
-int close_socket()
+int write_msg(int sock_fd, char* cmd, ...)
 {
+	va_list va;
+	va_start (va, cmd);
+	vsnprintf(request, 256, cmd, va);
+	va_end(va);
+
+	write(sock_fd, request, strlen(request));
+	printf(">>>>>>\n");
+	printf("%s", request);
+
 	return OK;
-
-
-	// printf("\n\n");
-	// for (size_t i = 0; i < 2048; i++)
-	// {
-	//     printf("%02x ");
-	//     if(i != 0 && i % 16 == 0)
-	//         printf("\n");
-	// }
-	// printf("\n\n");
-
-
-
 }
