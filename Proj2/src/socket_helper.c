@@ -128,6 +128,9 @@ int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
 
 	free(data);
 
+	fflush(stdout);
+	printf("Download: 100.0%% [====================]\n");
+
 	return OK;
 }
 
@@ -212,22 +215,4 @@ int write_msg(int sock_fd, char* cmd, ...)
 	printf("%s", request);
 
 	return OK;
-}
-
-int close_socket()
-{
-	return OK;
-
-
-	// printf("\n\n");
-	// for (size_t i = 0; i < 2048; i++)
-	// {
-	//     printf("%02x ");
-	//     if(i != 0 && i % 16 == 0)
-	//         printf("\n");
-	// }
-	// printf("\n\n");
-
-
-
 }

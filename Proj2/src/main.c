@@ -159,7 +159,6 @@ int main(int argc, char const *argv[])
 	FILE* dl;
 	char trash[1024];
 
-
 	if ( (dl = fopen(ftp_info.filename, "wb")) == NULL )
 	{
 		perror("fopen:");
@@ -173,15 +172,9 @@ int main(int argc, char const *argv[])
 	}
 
   	struct timespec start, end;
-
 	clock_gettime(CLOCK_MONOTONIC, &start);
-
 	read_file_w_size(retr_fd, dl, file_size);
-
 	clock_gettime(CLOCK_MONOTONIC, &end);
-
-	fflush(stdout);
-	printf("Download: 100.0%% [====================]\n");
 
 	fseek(dl, 0L, SEEK_END);
 	long received_size = ftell(dl);
