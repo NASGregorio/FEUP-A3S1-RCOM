@@ -14,20 +14,6 @@
 // https://tools.ietf.org/html/rfc959
 
 
-void print_msg(char* msg, uint8_t is_outgoing)
-{
-	if(is_outgoing == 0)
-	{
-		printf(">>>>>>\n");
-		printf("%s", msg);
-	}
-	else
-	{
-		printf("<<<<<<\n");
-		printf("%s", msg);
-	}
-}
-
 int main(int argc, char const *argv[])
 {
 	if(argc != 2)
@@ -53,6 +39,7 @@ int main(int argc, char const *argv[])
 	if(err != OK)
 		return err;
 
+
 	// Try to connect
 	printf("------------- CONNECTION -------------\n");
 	err = connect_socket(sock_fd, ftp_info.addr, 21);
@@ -62,7 +49,6 @@ int main(int argc, char const *argv[])
 	char* reply;
 	size_t timeout_sec = 30;
 	size_t timeout_usec = 0;
-	char request[256];
 	char* line_endings = "\r\n";
 
 	err = read_msg_block(sock_fd, "220");
@@ -70,19 +56,15 @@ int main(int argc, char const *argv[])
 		return err;
 
 
-	printf("------------- AUTHENTIFICATION -------------\n");
+	printf("\n------------- AUTHENTIFICATION -------------\n");
 
-	snprintf(request, 256, "USER %s%s", ftp_info.usr, line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "USER %s%s", ftp_info.usr, line_endings);
 
 	err = read_single_msg(sock_fd, "331", NULL, timeout_sec, timeout_usec);
 	if(err != OK)
 		return err;
 
-	snprintf(request, 256, "PASS %s%s", ftp_info.pwd, line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "PASS %s%s", ftp_info.pwd, line_endings);
 
 	err = read_single_msg(sock_fd, "230", NULL, timeout_sec, timeout_usec);
 	if(err != OK)
@@ -91,11 +73,9 @@ int main(int argc, char const *argv[])
 
 
 
-	printf("------------- SET TYPE -------------\n");
+	printf("\n------------- SET TYPE -------------\n");
 
-	snprintf(request, 256, "TYPE I%s", line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "TYPE I%s", line_endings);
 
 	err = read_single_msg(sock_fd, "200", NULL, timeout_sec, timeout_usec);
 	if(err != OK)
@@ -104,11 +84,9 @@ int main(int argc, char const *argv[])
 
 
 
-	printf("------------- GET SIZE -------------\n");
+	printf("\n------------- GET SIZE -------------\n");
 
-	snprintf(request, 256, "SIZE %s%s", ftp_info.url_path, line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "SIZE %s%s", ftp_info.url_path, line_endings);
 
 	int got_size = 0;
 	size_t file_size = 0;
@@ -121,11 +99,9 @@ int main(int argc, char const *argv[])
 	}
 
 
-	printf("------------- CHANGE DIRECTORY -------------\n");
+	printf("\n------------- CHANGE DIRECTORY -------------\n");
 
-	snprintf(request, 256, "CWD /%s%s", ftp_info.path, line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "CWD /%s%s", ftp_info.path, line_endings);
 
 	err = read_msg_block(sock_fd, "250");
 	if(err != OK)
@@ -134,11 +110,9 @@ int main(int argc, char const *argv[])
 
 
 
-	printf("------------- PASSIVE MODE -------------\n");
+	printf("\n------------- PASSIVE MODE -------------\n");
 
-	snprintf(request, 256, "PASV%s", line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "PASV%s", line_endings);
 
 	err = read_single_msg(sock_fd, "227", &reply, timeout_sec, timeout_usec);
 	if(err != OK)
@@ -174,13 +148,11 @@ int main(int argc, char const *argv[])
 	if(err != OK)
 		return err;
 
-	printf("------------- DOWNLOADING -------------\n");
+	printf("\n------------- DOWNLOADING -------------\n");
 
-	snprintf(request, 256, "RETR %s%s", ftp_info.filename, line_endings);
-	write(sock_fd, request, strlen(request));
-	print_msg(request, 0);
+	write_msg(sock_fd, "RETR %s%s", ftp_info.filename, line_endings);
 
-	err = read_two_step_msg(sock_fd, "150", "226", timeout_sec, timeout_usec);
+	err = read_single_msg(sock_fd, "150", &reply, timeout_sec, timeout_usec);
 	if(err != OK)
 		return err;
 
@@ -208,14 +180,23 @@ int main(int argc, char const *argv[])
 
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
+	fflush(stdout);
+	printf("Download: 100.0%% [====================]\n");
 
 	fseek(dl, 0L, SEEK_END);
 	long received_size = ftell(dl);
 
-
 	fclose(dl);
-	free(reply);
+
+	err = read_single_msg(sock_fd, "226", &reply, timeout_sec, timeout_usec);
+	if(err != OK)
+		return err;
+
+	printf("\n------------- METRICS -------------\n");
+
 	close(retr_fd);
+	free(reply);
+	
 	close(sock_fd);
 	free_ftp_info(&ftp_info);
 
@@ -225,10 +206,8 @@ int main(int argc, char const *argv[])
     if (start.tv_nsec > end.tv_nsec) { // clock underflow 
 		--seconds; 
 		ns += 1000000000; 
-    } 
+    }
 
-	fflush(stdout);
-	printf("Download: 100.0%% [====================]\n");
 	printf("Expected size: %ld\n", file_size);
 	printf("Received size: %ld\n", received_size);
     printf("Total time: %f\n", (double)seconds + (double)ns/(double)1000000000); 

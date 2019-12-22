@@ -11,6 +11,6 @@ int read_msg_block(int sock_fd, char* code_str);
 
 int read_single_msg(int sock_fd, char* code_str, char** msg, size_t tsec, size_t tusec);
 
-int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str, size_t tsec, size_t tusec);
+int write_msg(int sock_fd, char* cmd, ...);
 
 #endif /*__SOCKET_HELPER__*/

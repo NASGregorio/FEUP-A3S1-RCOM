@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -7,6 +8,8 @@
 
 #include "socket_helper.h"
 #include "defs.h"
+
+char request[256];
 
 int open_socket(int* sock_fd, FILE** sock_file)
 {
@@ -39,7 +42,7 @@ int connect_socket(int sock_fd, char* addr, uint16_t port)
 	return OK;
 }
 
-int read_msg2(int sock_fd, char* code_str, char** out_msg)
+int read_msg(int sock_fd, char* code_str, char** out_msg)
 {
 
 	char msg[256] = "";
@@ -71,6 +74,7 @@ int read_msg2(int sock_fd, char* code_str, char** out_msg)
 
 			if(strncmp(code, code_str, 3) != OK)
 			{
+				printf("Return code mismatch\n");
 				return 128;
 			}
 			else
@@ -84,8 +88,6 @@ int read_msg2(int sock_fd, char* code_str, char** out_msg)
 			}
 		}
     }
-
-	return 200;
 }
 
 int read_file_w_size(int retr_fd, FILE* dl, size_t file_size)
@@ -160,7 +162,7 @@ int read_msg_block(int sock_fd, char* code_str)
 			continue;
 		}
 
-		if(read_msg2(sock_fd, code_str, NULL) != OK) {
+		if(read_msg(sock_fd, code_str, NULL) != OK) {
 			return 128;
 		}
 		retries = 3;
@@ -195,24 +197,21 @@ int read_single_msg(int sock_fd, char* code_str, char** msg, size_t tsec, size_t
 	}
 
 	printf("<<<<<<\n");
-	return read_msg2(sock_fd, code_str, msg);
+	return read_msg(sock_fd, code_str, msg);
 }
 
-int read_two_step_msg(int sock_fd, char* code1_str, char* code2_str, size_t tsec, size_t tusec)
+int write_msg(int sock_fd, char* cmd, ...)
 {
+	va_list va;
+	va_start (va, cmd);
+	vsnprintf(request, 256, cmd, va);
+	va_end(va);
 
-	int err = read_single_msg(sock_fd, code1_str, NULL, tsec, tusec);
-	if(err != OK)
-		return err;
+	write(sock_fd, request, strlen(request));
+	printf(">>>>>>\n");
+	printf("%s", request);
 
-	read_single_msg(sock_fd, code2_str, NULL, 0, 500*1000);
 	return OK;
-}
-
-int write_socket()
-{
-	return OK;
-
 }
 
 int close_socket()
