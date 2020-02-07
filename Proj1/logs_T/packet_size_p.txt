@@ -1,0 +1,42 @@
+15:09:13
+Total bytes: 10968 | packet size: 256 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 3090004 us | 3.090004 s
+
+15:10:38
+Total bytes: 10968 | packet size: 512 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 2977406 us | 2.977406 s
+
+15:11:55
+Total bytes: 10968 | packet size: 1024 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 2924155 us | 2.924155 s
+
+15:13:42
+Total bytes: 10968 | packet size: 2048 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 2900631 us | 2.900631 s
+
+15:16:52
+Total bytes: 10968 | packet size: 4096 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 2885427 us | 2.885427 s
+
+15:17:42
+Total bytes: 10968 | packet size: 8192 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 2880243 us | 2.880243 s
+
+15:18:56
+Total bytes: 10968 | packet size: 16384 | Baud rate: 38400
+BCC     : 0 | BCC2   : 0
+Retries	: 0 | Resend : 0 | Misses : 0
+Time interval first - last data packets: 2875119 us | 2.875119 s
+
