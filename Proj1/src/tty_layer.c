@@ -10,6 +10,18 @@
 int get_baud(int baud)
 {
     switch (baud) {
+    case 110:
+        return B110;
+	case 300:
+        return B300;
+	case 600:
+        return B600;
+    case 1200:
+        return B1200;
+	case 2400:
+        return B2400;
+    case 4800:
+        return B4800;
     case 9600:
         return B9600;
     case 19200:
@@ -109,11 +121,11 @@ int set_port_attr(int fd, TERMIOS* oldtio, TERMIOS* newtio, int baud)
     bzero(newtio, sizeof(*newtio));
 
 	int a = B38400;
-	int b = get_baud(38400);
+	int b = get_baud(baud);
 	printf("%d | %d \n", a, b);
 
 	// set new settings
-    newtio->c_cflag = a | CS8 | CLOCAL | CREAD;
+    newtio->c_cflag = b | CS8 | CLOCAL | CREAD;
     newtio->c_iflag = IGNPAR;
     newtio->c_oflag = 0;
 

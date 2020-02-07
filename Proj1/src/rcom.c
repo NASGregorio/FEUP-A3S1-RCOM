@@ -195,16 +195,16 @@ int main(int argc, char *argv[])
 			{
 				if(buffer_rcvr[0] == TLV_START)
 				{
-					gettimeofday(&st,NULL);
-					printf("Got start control packet > %s | %luB\n", file_name, file_size);
-
 					unpack_control(&file_size, &file_name, buffer_rcvr);
+					
+					printf("Got start control packet > %s | %luB\n", file_name, file_size);
 
 					if(file_size > 256)
 						buffer_rcvr = realloc(buffer_rcvr, file_size);
 
 					file = fopen(file_name, "w");
 
+					gettimeofday(&st,NULL);
 				}
 				else if(buffer_rcvr[0] == TLV_DATA)
 				{
@@ -315,8 +315,8 @@ int main(int argc, char *argv[])
 
 	print_frame_errors(file_size, whole_buffer_size);
 
-	int elapsed = ((et.tv_sec - st.tv_sec) * 1000000) + (et.tv_usec - st.tv_usec);
-	printf("Time interval first - last data packets: %d us | %f s\n",elapsed, elapsed * 0.000001 );
+	size_t elapsed = ((et.tv_sec - st.tv_sec) * 1000000) + (et.tv_usec - st.tv_usec);
+	printf("Time interval first - last data packets: %lu us | %f s\n",elapsed, elapsed * 0.000001 );
 
 	// close connection
 	err = llclose(&oldtio, mode);

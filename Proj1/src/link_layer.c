@@ -419,8 +419,11 @@ int frame_disc_reply()
 
 	while(1)
 	{
-		read_msg(llfd, msg, &bytes_read, MAX_FRAME_REPLY_LEN, NULL);
-
+		printf("bytes read: %d  | err: %d\n",bytes_read,err);
+		timeout_exit = 1;
+		err = read_msg(llfd, msg, &bytes_read, MAX_FRAME_REPLY_LEN, return_on_timeout);
+		if(err == EXIT_TIMEOUT)
+			return DISC_CONN;
 		err = check_frame_bcc(msg, &bcc);
 		if(err != OK)
 		{
@@ -447,6 +450,7 @@ int frame_disc_reply()
 			DEBUG_PRINT(("Waiting for TRANSMITTER disconnect acknowledgement...\n"));
 		}
 	}
+	return DISC_CONN;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
